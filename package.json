@@ -11,7 +11,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "seed:test": "tsx scripts/seed-test-data.ts"
+    "seed:test": "tsx scripts/seed-test-data.ts",
+    "user:create": "tsx scripts/create-user.ts"
   },
   "dependencies": {
     "@ant-design/nextjs-registry": "^1.3.0",
