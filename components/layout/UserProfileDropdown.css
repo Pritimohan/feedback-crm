@@ -1,0 +1,59 @@
+/* Analytics color palette */
+.user-profile-trigger {
+  --fg: #1d4838;
+  --blue: #134175;
+  --amber: #fcb92d;
+  --text: #1a1a1a;
+  --text2: #666660;
+  --border: rgba(0, 0, 0, 0.08);
+  --radius: 10px;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px 6px 16px;
+  background: #f4f2ed;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.user-profile-trigger:hover {
+  background: #eeeae3;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.user-profile-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.user-profile-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.user-profile-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+
+.user-profile-placeholder {
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.user-profile-avatar {
+  flex-shrink: 0;
+}
