@@ -2,10 +2,10 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getAuthFromRequest } from '@/lib/auth/middleware';
 
 export async function middleware(request: NextRequest) {
-  const { user } = await getAuthFromRequest(request);
+  const { user, userRole } = await getAuthFromRequest(request);
   const { pathname } = request.nextUrl;
 
-  const publicPrefixes = ['/login', '/api/auth', '/api/health'];
+  const publicPrefixes = ['/login', '/api/auth', '/api/health', '/api/webhooks'];
   const isPublic =
     pathname === '/' || publicPrefixes.some((prefix) => pathname.startsWith(prefix));
 
@@ -18,6 +18,14 @@ export async function middleware(request: NextRequest) {
     url.pathname = '/login';
     url.searchParams.set('redirectTo', pathname);
     return NextResponse.redirect(url);
+  }
+
+  if (pathname.startsWith('/admin') && userRole !== 'admin') {
+    return NextResponse.redirect(new URL('/dt/followups', request.url));
+  }
+
+  if (pathname.startsWith('/dt') && userRole !== 'dt' && userRole !== 'admin') {
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   return NextResponse.next();
