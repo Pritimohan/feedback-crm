@@ -5,7 +5,6 @@ import { Badge, Card, Empty, Space, Tag, Typography } from 'antd';
 import { ClockCircleOutlined, ExclamationCircleOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import CallButton from '@/components/dt/CallButton';
 
 dayjs.extend(relativeTime);
 
@@ -129,7 +128,6 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
               key={item.followup.id}
               onClick={() => onFollowupClick(item)}
               style={{ cursor: 'pointer', padding: 16, borderBottom: '0.5px solid rgba(0,0,0,0.08)' }}
-              className="hover:bg-[#f4f2ed] transition-colors"
             >
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Space style={{ width: '100%', justifyContent: 'space-between' }}>
@@ -143,12 +141,9 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
                 </Space>
 
                 <Space separator="|">
-                  <Space size="small" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                    <Text type="secondary">
-                      <PhoneOutlined /> {item.customer.phone}
-                    </Text>
-                    <CallButton customerPhone={item.customer.phone} customerId={item.customer.id} />
-                  </Space>
+                  <Text type="secondary">
+                    <PhoneOutlined /> {item.customer.phone}
+                  </Text>
                   <Text type="secondary">Attempts: {item.followup.attempt_count}</Text>
                   <Text type="secondary">Objective: {item.objective}</Text>
                 </Space>

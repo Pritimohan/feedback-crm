@@ -47,7 +47,6 @@ export default function DTLayout({ children }: { children: React.ReactNode }) {
       key: "/dt/customers",
       icon: <TeamOutlined />,
       label: "All Customers",
-      disabled: true,
     },
     {
       key: "/dt/callhistory",

@@ -1,12 +1,63 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { App, Button, Card, Modal, Select, Space, Tabs, Timeline, Typography, Input, Checkbox } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  App,
+  Button,
+  Card,
+  Col,
+  Image,
+  Modal,
+  Row,
+  Select,
+  Space,
+  Statistic,
+  Tabs,
+  Tag,
+  Timeline,
+  Typography,
+  Input,
+  Checkbox,
+} from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, MailOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import CallButton from '@/components/dt/CallButton';
 
 const { Text } = Typography;
+const MAX_REVIEW_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+
+function renderPreviousInteractionContent(remarks: string | null, payload: unknown): ReactNode {
+  const rows: ReactNode[] = [];
+  if (remarks?.trim()) {
+    rows.push(
+      <span key="remarks" style={{ marginRight: 8 }}>
+        <Text type="secondary" style={{ fontSize: 13 }}>
+          • Remarks:
+        </Text>
+        <Text style={{ fontSize: 13 }}> {remarks.trim()}</Text>
+      </span>
+    );
+  }
+  if (payload && typeof payload === 'object' && payload !== null) {
+    for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+      if (value === null || value === undefined || value === '') continue;
+      if (typeof value === 'object') continue;
+      const label = key
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+      rows.push(
+        <span key={key} style={{ marginRight: 8 }}>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            • {label}:
+          </Text>
+          <Text style={{ fontSize: 13 }}> {String(value)}</Text>
+        </span>
+      );
+    }
+  }
+  if (!rows.length) return null;
+  return <div style={{ lineHeight: 1.6 }}>{rows}</div>;
+}
 
 type ConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'dont_reviewed';
 
@@ -24,20 +75,34 @@ interface AttemptRow {
   notes: string | null;
 }
 
+interface PreviousFollowupRow {
+  id: string;
+  followup_number: number;
+  connected_date: Date | string | null;
+  updated_at: Date | string;
+  remarks: string | null;
+  payload: unknown;
+}
+
 interface FollowupDetails {
   followup: {
     id: string;
     followup_number: number;
+    scheduled_date: string;
+    attempt_count: number;
   };
   lead: {
     id: string;
+    lead_type: 'nps' | 'review';
   };
   customer: {
     id: string;
     name: string;
     phone: string;
+    email: string | null;
   };
   attempts: AttemptRow[];
+  previousFollowups?: PreviousFollowupRow[];
 }
 
 export default function FollowupModal({ followupId, visible, onClose, onSuccess }: Props) {
@@ -50,6 +115,9 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   const [issueDescription, setIssueDescription] = useState('');
   const [reviewRemark, setReviewRemark] = useState('');
   const [reviewScreenshotUrl, setReviewScreenshotUrl] = useState('');
+  const [reviewScreenshotFile, setReviewScreenshotFile] = useState<File | null>(null);
+  const [reviewScreenshotPreviewUrl, setReviewScreenshotPreviewUrl] = useState('');
+  const [uploadingReviewScreenshot, setUploadingReviewScreenshot] = useState(false);
   const [isTestimonial, setIsTestimonial] = useState(false);
   const [dontReviewedRemark, setDontReviewedRemark] = useState('');
   const [interestedRemark, setInterestedRemark] = useState('');
@@ -70,6 +138,8 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         setIssueDescription('');
         setReviewRemark('');
         setReviewScreenshotUrl('');
+        setReviewScreenshotFile(null);
+        setReviewScreenshotPreviewUrl('');
         setIsTestimonial(false);
         setDontReviewedRemark('');
         setInterestedRemark('');
@@ -81,6 +151,21 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     };
     void load();
   }, [followupId, visible, message]);
+
+  useEffect(() => {
+    if (!visible) {
+      setDetails(null);
+      setShowConnectedForm(false);
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    return () => {
+      if (reviewScreenshotPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(reviewScreenshotPreviewUrl);
+      }
+    };
+  }, [reviewScreenshotPreviewUrl]);
 
   const handleNoAnswer = async () => {
     if (!followupId) return;
@@ -128,8 +213,31 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     if (!followupId || !connectedChoice) return;
     try {
       setSubmitting(true);
+      let uploadedReviewScreenshotPath = reviewScreenshotUrl || '';
+
+      if (connectedChoice === 'reviewed' && reviewScreenshotFile) {
+        setUploadingReviewScreenshot(true);
+        const formData = new FormData();
+        formData.append('file', reviewScreenshotFile);
+        formData.append('followupId', followupId);
+
+        const uploadRes = await fetch('/api/dt/uploads/review-screenshot', {
+          method: 'POST',
+          body: formData,
+        });
+        const uploadJson = await uploadRes.json();
+        if (!uploadRes.ok || !uploadJson?.success) {
+          throw new Error(uploadJson?.error || 'Failed to upload screenshot');
+        }
+
+        uploadedReviewScreenshotPath = String(uploadJson.data.path ?? '');
+        setReviewScreenshotUrl(uploadedReviewScreenshotPath);
+        setReviewScreenshotPreviewUrl(String(uploadJson.data.signedUrl ?? ''));
+        setReviewScreenshotFile(null);
+      }
+
       const payload: Record<string, unknown> = {
-        review_screenshot_url: reviewScreenshotUrl || undefined,
+        review_screenshot_url: uploadedReviewScreenshotPath || undefined,
         review_remark: reviewRemark || undefined,
         is_testimonial: isTestimonial,
         issue_description: issueDescription || undefined,
@@ -149,22 +257,62 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     } catch (error: unknown) {
       message.error(error instanceof Error ? error.message : 'Failed to save connected outcome');
     } finally {
+      setUploadingReviewScreenshot(false);
       setSubmitting(false);
     }
   };
 
-  const connectedOptions: Array<{ label: string; value: ConnectedChoice }> = (details?.followup?.followup_number ?? 0) >= 3
-    ? [
-        { label: 'Reviewed', value: 'reviewed' },
-        { label: 'Issue with product', value: 'issue_with_product' },
-        { label: "Don't Reviewed", value: 'dont_reviewed' },
-      ]
-    : [
-        { label: 'Reviewed', value: 'reviewed' },
-        { label: 'Issue with product', value: 'issue_with_product' },
-        { label: 'Interested', value: 'interested' },
-        { label: "Don't Reviewed", value: 'dont_reviewed' },
-      ];
+  const handleReviewScreenshotSelect = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      message.error('Only image files are allowed');
+      return;
+    }
+    if (file.size > MAX_REVIEW_IMAGE_SIZE_BYTES) {
+      message.error('Image size must be 10MB or less');
+      return;
+    }
+
+    if (reviewScreenshotPreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(reviewScreenshotPreviewUrl);
+    }
+    setReviewScreenshotFile(file);
+    setReviewScreenshotUrl('');
+    setReviewScreenshotPreviewUrl(URL.createObjectURL(file));
+    message.success('Screenshot selected. It will upload on Submit Outcome.');
+  };
+
+  if (!details) {
+    return (
+      <Modal
+        title="Follow-up Details"
+        open={visible}
+        onCancel={onClose}
+        footer={null}
+        width={1000}
+        loading={loading}
+      />
+    );
+  }
+
+  const { followup, customer, attempts, previousFollowups = [] } = details;
+
+  const getFollowupTitle = (followupNumber: number) => `Follow-up ${followupNumber}`;
+
+  const sortedPreviousFollowups = [...previousFollowups].sort((a, b) => a.followup_number - b.followup_number);
+
+  const connectedOptions: Array<{ label: string; value: ConnectedChoice }> =
+    followup.followup_number >= 3
+      ? [
+          { label: 'Reviewed', value: 'reviewed' },
+          { label: 'Issue with product', value: 'issue_with_product' },
+          { label: "Don't Reviewed", value: 'dont_reviewed' },
+        ]
+      : [
+          { label: 'Reviewed', value: 'reviewed' },
+          { label: 'Issue with product', value: 'issue_with_product' },
+          { label: 'Interested', value: 'interested' },
+          { label: "Don't Reviewed", value: 'dont_reviewed' },
+        ];
 
   const tabItems = [
     {
@@ -173,26 +321,74 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       children: !showConnectedForm ? (
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <Card>
-            <Space direction="vertical">
-              <Text strong>
-                <UserOutlined /> {details?.customer?.name}
-              </Text>
-              <Space align="center">
-                <Text>
-                  <PhoneOutlined /> {details?.customer?.phone}
-                </Text>
-                {details?.customer?.phone ? (
-                  <CallButton customerPhone={details.customer.phone} customerId={details.customer.id} />
-                ) : null}
-              </Space>
-              <Text type="secondary">Follow-up {details?.followup?.followup_number}</Text>
-            </Space>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Space direction="vertical">
+                  <Text strong>
+                    <UserOutlined /> {customer.name}
+                  </Text>
+                  <Space>
+                    <Text>
+                      <PhoneOutlined /> {customer.phone}
+                    </Text>
+                    <CallButton customerPhone={customer.phone} customerId={customer.id} />
+                  </Space>
+                  {customer.email ? (
+                    <Text>
+                      <MailOutlined /> {customer.email}
+                    </Text>
+                  ) : null}
+                </Space>
+              </Col>
+              <Col span={12}>
+                <Space direction="vertical">
+                  <Statistic title="Attempts" value={followup.attempt_count} />
+                </Space>
+              </Col>
+            </Row>
           </Card>
+
+          {sortedPreviousFollowups.length > 0 ? (
+            <Card title="Previous Interactions" size="small" styles={{ body: { padding: '8px 12px' } }}>
+              {sortedPreviousFollowups.map((pf, index) => {
+                const label = `Follow-up ${pf.followup_number}`;
+                const when = pf.connected_date ?? pf.updated_at;
+                return (
+                  <div
+                    key={pf.id}
+                    style={{
+                      padding: '6px 0',
+                      borderBottom: index < sortedPreviousFollowups.length - 1 ? '0.5px solid rgba(0,0,0,0.08)' : 'none',
+                    }}
+                  >
+                    <div style={{ marginBottom: 4 }}>
+                      <Tag color="#1d4838" style={{ marginRight: 6 }}>
+                        {label}
+                      </Tag>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {dayjs(when).format('MMM D, YYYY')}
+                      </Text>
+                    </div>
+                    {renderPreviousInteractionContent(pf.remarks, pf.payload)}
+                  </div>
+                );
+              })}
+            </Card>
+          ) : null}
+
           <Card title="Call Outcome">
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Button type="primary" size="large" icon={<CheckCircleOutlined />} onClick={() => setShowConnectedForm(true)} block>
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <Button
+                type="primary"
+                size="large"
+                icon={<CheckCircleOutlined />}
+                onClick={() => setShowConnectedForm(true)}
+                loading={submitting}
+                block
+              >
                 Connected
               </Button>
+
               <Button size="large" onClick={handleNoAnswer} loading={submitting} block>
                 No Answer
               </Button>
@@ -203,37 +399,89 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <Card title="Other Options">
             <Space wrap>
-              <Button onClick={() => handleShortcutOutcome('busy')} loading={submitting}>
+              <Button size="large" onClick={() => handleShortcutOutcome('busy')} loading={submitting}>
                 Busy
               </Button>
-              <Button onClick={() => handleShortcutOutcome('wrong_number')} loading={submitting}>
+              <Button size="large" onClick={() => handleShortcutOutcome('wrong_number')} loading={submitting}>
                 Wrong Number
               </Button>
-              <Button onClick={() => handleShortcutOutcome('not_interested')} loading={submitting}>
+              <Button size="large" onClick={() => handleShortcutOutcome('not_interested')} loading={submitting}>
                 Not Interested
-              </Button>
-              <Button onClick={() => handleShortcutOutcome('no_answer')} loading={submitting}>
-                No Answer
               </Button>
             </Space>
           </Card>
 
-          <Card title="Connected Outcome Form">
+          <Card title="Call Outcome: Connected">
             <Space direction="vertical" style={{ width: '100%' }}>
               <Select
                 placeholder="Select connected outcome"
                 options={connectedOptions}
                 value={connectedChoice}
                 onChange={(value) => setConnectedChoice(value)}
+                style={{ width: 220 }}
               />
 
               {connectedChoice === 'reviewed' ? (
                 <>
-                  <Input
-                    placeholder="Attach Review Screenshot URL (optional)"
-                    value={reviewScreenshotUrl}
-                    onChange={(e) => setReviewScreenshotUrl(e.target.value)}
-                  />
+                  <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                    <input
+                      id="review-screenshot-upload"
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const selectedFile = e.currentTarget.files?.[0];
+                        if (selectedFile) {
+                          handleReviewScreenshotSelect(selectedFile);
+                        }
+                        e.currentTarget.value = '';
+                      }}
+                    />
+                    <Space wrap>
+                      <Button
+                        onClick={() => {
+                          const input = document.getElementById('review-screenshot-upload') as HTMLInputElement | null;
+                          input?.click();
+                        }}
+                        loading={uploadingReviewScreenshot || submitting}
+                      >
+                        Choose review screenshot
+                      </Button>
+                      {reviewScreenshotFile || reviewScreenshotUrl ? (
+                        <Button
+                          danger
+                          type="text"
+                          onClick={() => {
+                            if (reviewScreenshotPreviewUrl.startsWith('blob:')) {
+                              URL.revokeObjectURL(reviewScreenshotPreviewUrl);
+                            }
+                            setReviewScreenshotFile(null);
+                            setReviewScreenshotUrl('');
+                            setReviewScreenshotPreviewUrl('');
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                    </Space>
+                    <Text type="secondary">Max image size: 10MB</Text>
+                    {reviewScreenshotFile ? (
+                      <Text type="secondary">Selected file: {reviewScreenshotFile.name}</Text>
+                    ) : null}
+                    {reviewScreenshotUrl ? (
+                      <Text type="secondary" style={{ wordBreak: 'break-all' }}>
+                        Stored path: {reviewScreenshotUrl}
+                      </Text>
+                    ) : null}
+                    {reviewScreenshotPreviewUrl ? (
+                      <Image
+                        src={reviewScreenshotPreviewUrl}
+                        alt="Review screenshot preview"
+                        width={220}
+                        style={{ borderRadius: 8, border: '1px solid rgba(0,0,0,0.08)' }}
+                      />
+                    ) : null}
+                  </Space>
                   <Input.TextArea
                     placeholder="Add Remark (optional)"
                     rows={3}
@@ -295,34 +543,40 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       key: 'history',
       label: 'History',
       children: (
-        <Card title="Call Attempts" size="small">
-          {details?.attempts?.length ? (
-            <Timeline
-              items={details.attempts.map((attempt: AttemptRow) => ({
-                content: (
-                  <Space direction="vertical" size={0}>
-                    <Text strong>
-                      {attempt.outcome === 'connected' ? (
-                        <>
-                          <CheckCircleOutlined style={{ color: '#1d4838' }} /> Connected
-                        </>
-                      ) : (
-                        <>
-                          <CloseCircleOutlined style={{ color: '#666660' }} /> {attempt.outcome}
-                        </>
-                      )}
-                    </Text>
-                    <Text type="secondary">{dayjs(attempt.attempt_date).format('MMM D, YYYY h:mm A')}</Text>
-                    {attempt.notes ? <Text type="secondary">{attempt.notes}</Text> : null}
-                  </Space>
-                ),
-                color: attempt.outcome === 'connected' ? '#1d4838' : '#666660',
-              }))}
-            />
-          ) : (
-            <Text type="secondary">No attempts yet</Text>
-          )}
-        </Card>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Card title="Call Attempts" size="small">
+            {attempts.length > 0 ? (
+              <Timeline
+                items={attempts.map((attempt: AttemptRow) => ({
+                  content: (
+                    <Space direction="vertical" size={0}>
+                      <Text strong>
+                        {attempt.outcome === 'connected' ? (
+                          <>
+                            <CheckCircleOutlined style={{ color: '#1d4838' }} /> Connected
+                          </>
+                        ) : (
+                          <>
+                            <CloseCircleOutlined style={{ color: '#666660' }} /> {attempt.outcome}
+                          </>
+                        )}
+                      </Text>
+                      <Text type="secondary">{dayjs(attempt.attempt_date).format('MMM D, YYYY h:mm A')}</Text>
+                      {attempt.notes ? (
+                        <Text type="secondary" italic>
+                          {attempt.notes}
+                        </Text>
+                      ) : null}
+                    </Space>
+                  ),
+                  color: attempt.outcome === 'connected' ? '#1d4838' : '#666660',
+                }))}
+              />
+            ) : (
+              <Text type="secondary">No attempts yet</Text>
+            )}
+          </Card>
+        </Space>
       ),
     },
   ];
@@ -330,19 +584,15 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   return (
     <Modal
       title={
-        <Space>
-          <Text>
-            Follow-up {details?.followup?.followup_number}: {details?.customer?.name}
-          </Text>
-        </Space>
+        <Text strong style={{ fontSize: 16, color: 'var(--crm-text, #1a1a1a)' }}>
+          {getFollowupTitle(followup.followup_number)}: {customer.name}
+        </Text>
       }
       open={visible}
       onCancel={showConnectedForm ? undefined : onClose}
       closable={!showConnectedForm}
       footer={null}
       width={1000}
-      loading={loading}
-      destroyOnHidden
     >
       <Tabs defaultActiveKey="call" items={tabItems} />
     </Modal>

@@ -5,7 +5,14 @@ export async function middleware(request: NextRequest) {
   const { user, userRole } = await getAuthFromRequest(request);
   const { pathname } = request.nextUrl;
 
-  const publicPrefixes = ['/login', '/api/auth', '/api/health', '/api/webhooks'];
+  const publicPrefixes = [
+    '/login',
+    '/api/auth',
+    '/api/health',
+    '/api/webhooks',
+    '/api/customers/warranty',
+    '/api/customers/dietplan',
+  ];
   const isPublic =
     pathname === '/' || publicPrefixes.some((prefix) => pathname.startsWith(prefix));
 
@@ -22,6 +29,15 @@ export async function middleware(request: NextRequest) {
 
   if (pathname.startsWith('/admin') && userRole !== 'admin') {
     return NextResponse.redirect(new URL('/dt/followups', request.url));
+  }
+
+  if (
+    userRole === 'admin' &&
+    (pathname === '/admin/dashboard' ||
+      pathname === '/admin/config' ||
+      pathname === '/admin/test-call')
+  ) {
+    return NextResponse.redirect(new URL('/admin/users', request.url));
   }
 
   if (pathname.startsWith('/dt') && userRole !== 'dt' && userRole !== 'admin') {

@@ -1,7 +1,8 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { db, type FeedbackDbTransaction } from '@/lib/db';
-import { customers, leads, users } from '@/lib/db/schema';
+import { customers, leads } from '@/lib/db/schema';
 import { createLifecycleForLead } from '@/lib/services/leadLifecycleEngine';
+import { selectLeastLoadedDt } from '@/lib/services/callDistributionService';
 
 /**
  * Fitty-style `findAvailableDT`: least total assignments per active DT, deterministic tie-break.
@@ -11,42 +12,7 @@ export async function resolveAssignedDt(
   preferredDtId?: string | null,
   tx?: FeedbackDbTransaction
 ): Promise<string | null> {
-  const d = tx ?? db;
-
-  if (preferredDtId) {
-    const [preferred] = await d
-      .select({ id: users.id })
-      .from(users)
-      .where(and(eq(users.id, preferredDtId), eq(users.role, 'dt'), eq(users.active_status, true)));
-    if (preferred) return preferred.id;
-  }
-
-  const dtLoads = await d
-    .select({
-      dtId: users.id,
-      assignedCount: sql<number>`COUNT(${leads.id})`,
-    })
-    .from(users)
-    .leftJoin(leads, eq(leads.assigned_dt_id, users.id))
-    .where(and(eq(users.role, 'dt'), eq(users.active_status, true)))
-    .groupBy(users.id);
-
-  if (dtLoads.length === 0) return null;
-
-  dtLoads.sort((a, b) => {
-    const countDiff = Number(a.assignedCount) - Number(b.assignedCount);
-    if (countDiff !== 0) return countDiff;
-    return (a.dtId ?? '').localeCompare(b.dtId ?? '');
-  });
-
-  const candidate = dtLoads[0].dtId;
-  if (!candidate) return null;
-
-  const [stillActive] = await d
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.id, candidate), eq(users.role, 'dt'), eq(users.active_status, true)));
-  return stillActive?.id ?? null;
+  return selectLeastLoadedDt(preferredDtId, tx);
 }
 
 export async function resolveExistingCustomerByPhone(phone: string) {

@@ -441,7 +441,7 @@ export async function recordConnectedOutcome(params: {
 
 export async function getActiveFollowupsForDt(dtId: string, date: Date = new Date()) {
   const start = startOfDay(date);
-  const end = endOfDay(date);
+  const now = date;
 
   const rows = await db
     .select({
@@ -459,7 +459,7 @@ export async function getActiveFollowupsForDt(dtId: string, date: Date = new Dat
         eq(leadLifecycleFollowups.assigned_dt_id, dtId),
         eq(leadLifecycles.status, 'active'),
         eq(leadLifecycleFollowups.status, 'pending'),
-        lte(leadLifecycleFollowups.scheduled_date, end)
+        lte(leadLifecycleFollowups.scheduled_date, now)
       )
     );
 

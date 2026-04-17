@@ -1,10 +1,16 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Layout, Menu, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import { DashboardOutlined, LogoutOutlined } from '@ant-design/icons';
+import {
+  TeamOutlined,
+  BarChartOutlined,
+  LogoutOutlined,
+  CrownOutlined,
+  PieChartOutlined,
+} from '@ant-design/icons';
 import { UserProfileDropdown } from '@/components/layout/UserProfileDropdown';
 
 const { Header, Sider, Content } = Layout;
@@ -39,11 +45,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const menuItems: MenuProps['items'] = [
     {
-      key: '/admin/dashboard',
-      icon: <DashboardOutlined />,
-      label: 'Dashboard',
+      key: '/admin/analytics',
+      icon: <BarChartOutlined />,
+      label: 'Analytics',
+    },
+    {
+      key: '/admin/users',
+      icon: <CrownOutlined />,
+      label: 'User Management',
+    },
+    {
+      key: '/admin/call-distribution',
+      icon: <PieChartOutlined />,
+      label: 'Call Distribution',
+    },
+    {
+      key: '/admin/customers',
+      icon: <TeamOutlined />,
+      label: 'All Customers',
     },
   ];
+  const selectedKey = pathname;
 
   const handleMenuClick: MenuProps['onClick'] = (e) => {
     router.push(e.key);
@@ -71,9 +93,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             borderBottom: '0.5px solid rgba(0,0,0,0.08)',
           }}
         >
-          {collapsed ? 'AD' : 'Admin'}
+          {!collapsed ? 'Fitty CRM' : 'FC'}
         </div>
-        <Menu mode="inline" selectedKeys={[pathname]} items={menuItems} onClick={handleMenuClick} style={{ borderRight: 0 }} />
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          items={menuItems}
+          onClick={handleMenuClick}
+          style={{ borderRight: 0 }}
+        />
       </Sider>
 
       <Layout>

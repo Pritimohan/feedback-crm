@@ -8,10 +8,12 @@ import './UserProfileDropdown.css';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
+  dt: 'Dietitian',
 };
 
 const ROLE_BADGE_STYLES: Record<string, { bg: string; color: string }> = {
   admin: { bg: 'rgba(29,72,56,.12)', color: '#1D4838' },
+  dt: { bg: 'rgba(19,65,117,.12)', color: '#134175' },
 };
 
 interface UserProfileDropdownProps {
