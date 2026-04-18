@@ -25,6 +25,7 @@ import {
   scheduleNextFollowupFromConnected,
 } from '@/lib/lifecycle/leadLifecycleSchedule';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
+import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -374,22 +375,25 @@ export async function recordConnectedOutcome(params: {
       .where(eq(leadLifecycleFollowups.id, followupId));
 
     const transition = computeConnectedTransition(choice);
-    const nextFollowupNumber = transition.advanceStage ? row.followup.followup_number + 1 : row.followup.followup_number;
+    const nextFollowupNumber = transition.advanceStage
+      ? Math.min(row.followup.followup_number + 1, MAX_FOLLOWUP_NUMBER)
+      : row.followup.followup_number;
 
     let nextFollowupId: string | null = null;
-    if (transition.advanceStage && row.followup.followup_number < 3) {
+    if (transition.advanceStage && row.followup.followup_number < MAX_FOLLOWUP_NUMBER) {
+      const insertedFollowupNumber = row.followup.followup_number + 1;
       const [nextFollowup] = await tx
         .insert(leadLifecycleFollowups)
         .values({
           lifecycle_id: row.lifecycle.id,
-          followup_number: nextFollowupNumber,
+          followup_number: insertedFollowupNumber,
           assigned_dt_id: row.lead.assigned_dt_id ?? dtId,
           scheduled_date: scheduleNextFollowupFromConnected(now),
           status: 'pending',
           attempt_count: 0,
           max_attempts: row.followup.max_attempts,
           payload: {
-            objective: getCallObjective(row.lead.lead_type, nextFollowupNumber),
+            objective: getCallObjective(row.lead.lead_type, insertedFollowupNumber),
           },
           updated_at: now,
         })
@@ -398,7 +402,8 @@ export async function recordConnectedOutcome(params: {
 
     }
 
-    const lifecycleIsCompleted = !transition.advanceStage || row.followup.followup_number >= 3;
+    const lifecycleIsCompleted =
+      !transition.advanceStage || row.followup.followup_number >= MAX_FOLLOWUP_NUMBER;
     await tx
       .update(leadLifecycles)
       .set({

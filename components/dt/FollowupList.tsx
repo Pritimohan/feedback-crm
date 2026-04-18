@@ -5,6 +5,7 @@ import { Badge, Card, Empty, Space, Tag, Typography } from 'antd';
 import { ClockCircleOutlined, ExclamationCircleOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 dayjs.extend(relativeTime);
 
@@ -136,7 +137,7 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
                     <Text strong>{item.customer.name}</Text>
                   </Space>
                   <Tag color={item.followup.followup_number === 0 ? 'green' : 'blue'}>
-                    {item.followup.followup_number === 0 ? 'Follow-up 0' : `Follow-up ${item.followup.followup_number}`}
+                    {followupUiLabel(item.followup.followup_number)}
                   </Tag>
                 </Space>
 

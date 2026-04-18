@@ -3,6 +3,7 @@
 import { Button, Checkbox, Form, Input, Modal, Radio, Select, Space, Typography, Upload } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
+import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 type PrimaryMode = 'connected' | 'no_answer';
 type QuickOutcome = 'busy' | 'wrong_number' | 'not_interested' | 'no_answer';
@@ -128,7 +129,7 @@ export function DTReviewLeadModal({
       <Space direction="vertical" style={{ width: '100%' }} size={14}>
         {data ? (
           <Typography.Text type="secondary">
-            {data.phone} | Follow-up {data.followupNumber}
+            {data.phone} | {followupUiLabel(data.followupNumber)}
           </Typography.Text>
         ) : null}
 

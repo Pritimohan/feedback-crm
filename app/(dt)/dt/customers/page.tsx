@@ -30,6 +30,7 @@ import {
 import dayjs from 'dayjs';
 import CallButton from '@/components/dt/CallButton';
 import FollowupModal from '@/components/dt/FollowupModal';
+import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 const { Title, Paragraph, Text } = Typography;
 const { Search } = Input;
@@ -253,12 +254,12 @@ export default function CustomersPage() {
       ),
     },
     {
-      title: 'Followup Stage',
+      title: 'Follow-up stage',
       dataIndex: 'currentFollowupStage',
       key: 'currentFollowupStage',
       render: (stage: number | null | undefined) => {
         if (stage === null || stage === undefined) return <Text type="secondary">-</Text>;
-        return <Tag color="#134175">{`Follow-up ${stage}`}</Tag>;
+        return <Tag color="#134175">{followupUiLabel(stage)}</Tag>;
       },
     },
     {
@@ -320,16 +321,15 @@ export default function CustomersPage() {
           ]}
         />
         <Select
-          placeholder="Filter by Follow-up Number"
+          placeholder="Filter by follow-up stage"
           allowClear
           style={{ width: 240 }}
           value={selectedFollowupStage}
           onChange={handleFollowupFilter}
           options={[
-            { label: 'Follow-up 0', value: 0 },
-            { label: 'Follow-up 1', value: 1 },
-            { label: 'Follow-up 2', value: 2 },
-            { label: 'Follow-up 3', value: 3 },
+            { label: followupUiLabel(0), value: 0 },
+            { label: followupUiLabel(1), value: 1 },
+            { label: followupUiLabel(2), value: 2 },
           ]}
         />
       </Space>

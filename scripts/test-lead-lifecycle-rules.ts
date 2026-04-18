@@ -4,6 +4,7 @@ import {
   canChooseInterested,
   computeConnectedTransition,
   computeNonConnectedTransition,
+  getConnectedChoicesForStage,
   validateConnectedChoicePayload,
 } from '../lib/lifecycle/leadLifecycleValidation';
 
@@ -40,8 +41,12 @@ function run() {
   });
   assert.equal(wrongNumberDeferred.nextActivityStatus, 'deferred');
 
-  assert.equal(canChooseInterested(2), true);
-  assert.equal(canChooseInterested(3), false);
+  assert.equal(canChooseInterested(0), true);
+  assert.equal(canChooseInterested(1), true);
+  assert.equal(canChooseInterested(2), false);
+
+  const choicesFinalStage = getConnectedChoicesForStage(2);
+  assert.ok(!choicesFinalStage.includes('interested'));
 
   const interestedTransition = computeConnectedTransition('interested');
   assert.equal(interestedTransition.nextActivityStatus, 'active');

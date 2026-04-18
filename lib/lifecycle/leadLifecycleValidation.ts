@@ -1,3 +1,5 @@
+import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
+
 export type LeadType = 'nps' | 'review';
 export type LeadActivityStatus = 'active' | 'inactive' | 'deferred';
 export type NonConnectedOutcome = 'busy' | 'wrong_number' | 'not_interested' | 'no_answer';
@@ -23,11 +25,11 @@ export function isConnectedChoice(value: string): value is ConnectedChoice {
 }
 
 export function canChooseInterested(followupNumber: number): boolean {
-  return followupNumber <= 2;
+  return followupNumber < MAX_FOLLOWUP_NUMBER;
 }
 
 export function getConnectedChoicesForStage(followupNumber: number): ConnectedChoice[] {
-  if (followupNumber >= 3) {
+  if (followupNumber >= MAX_FOLLOWUP_NUMBER) {
     return ['reviewed', 'issue_with_product', 'dont_reviewed'];
   }
 
@@ -51,7 +53,7 @@ export function validateConnectedChoicePayload(params: {
   const { choice, followupNumber, payload } = params;
 
   if (choice === 'interested' && !canChooseInterested(followupNumber)) {
-    return { valid: false, reason: 'Interested is only allowed until follow-up stage 2' };
+    return { valid: false, reason: 'Interested is not available on the final follow-up stage' };
   }
 
   if (choice === 'issue_with_product' && !payload.issue_description?.trim()) {

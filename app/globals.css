@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../components/analytics";
 
 /* Analytics-based CRM color palette */
 :root {

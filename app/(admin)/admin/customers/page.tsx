@@ -23,6 +23,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { UserOutlined, PhoneOutlined, MailOutlined, DollarOutlined, ShoppingOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import CallButton from '@/components/dt/CallButton';
+import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 const { Title, Paragraph, Text } = Typography;
 const { Search } = Input;
@@ -48,9 +49,9 @@ export default function AllCustomersPage() {
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const FOLLOWUP_STAGE_OPTIONS = [
-    { label: 'Follow-up 1', value: 1 },
-    { label: 'Follow-up 2', value: 2 },
-    { label: 'Follow-up 3', value: 3 },
+    { label: followupUiLabel(0), value: 0 },
+    { label: followupUiLabel(1), value: 1 },
+    { label: followupUiLabel(2), value: 2 },
   ];
   const LIFECYCLE_FILTER_OPTIONS = [
     { label: 'Active', value: 'active' },
@@ -101,7 +102,7 @@ export default function AllCustomersPage() {
     { title: 'Assigned To', dataIndex: 'assignedDtId', key: 'assignedDtId', render: (dtId: string) => { const dt = dietitians.get(dtId); return dt ? <Text>{dt.name}</Text> : <Text type="secondary">Unassigned</Text>; } },
     { title: 'Product', key: 'product', width: 220, render: (_, record) => { const content = record.latestProductName || record.sku || '-'; return <Tooltip title={record.latestProductName || record.sku}><Text type={record.latestProductName ? undefined : 'secondary'} style={{ fontSize: '12px' }}>{content}</Text></Tooltip>; } },
     { title: 'Lifecycle Stage', key: 'lifecycleDisplay', render: (_: unknown, record: Customer) => { const stage = record.currentLifecycleStage; if (!stage) return <Text type="secondary">UNKNOWN</Text>; return <Tag color={getLifecycleColor(stage)}>{stage.replace('_', ' ').toUpperCase()}</Tag>; } },
-    { title: 'Followup Stage', dataIndex: 'currentFollowupStage', key: 'currentFollowupStage', render: (stage: number | null | undefined) => { const labels: Record<number, string> = { 1: 'Follow-up 1', 2: 'Follow-up 2', 3: 'Follow-up 3' }; if (stage === null || stage === undefined) return <Text type="secondary">-</Text>; return <Tag color="#134175">{labels[stage] ?? `Follow-up ${stage}`}</Tag>; } },
+    { title: 'Follow-up stage', dataIndex: 'currentFollowupStage', key: 'currentFollowupStage', render: (stage: number | null | undefined) => { if (stage === null || stage === undefined) return <Text type="secondary">-</Text>; return <Tag color="#134175">{followupUiLabel(stage)}</Tag>; } },
     { title: 'LTV', dataIndex: 'ltvScore', key: 'ltvScore', render: (ltv: string) => `₹${parseFloat(ltv || '0').toFixed(0)}` },
     { title: 'Last Order', dataIndex: 'lastOrderDate', key: 'lastOrderDate', render: (date: string | Date | null) => (!date ? 'No orders' : dayjs(date).format('MMM D, YYYY')) },
   ];
@@ -115,7 +116,7 @@ export default function AllCustomersPage() {
         <Select placeholder="Filter by Lead Type" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedLeadType(next); setSelectedLifecycleStage(null); applyFilters(searchText, selectedDietitianId, null, selectedFollowupStage, next); }} value={selectedLeadType} options={[{ label: 'Review', value: 'review' }, { label: 'NPS', value: 'nps' }]} />
         <Select placeholder="Filter by Dietitian" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedDietitianId(next); applyFilters(searchText, next, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} value={selectedDietitianId} options={[...Array.from(dietitians.values()).map((dt) => ({ label: dt.name, value: dt.id }))]} />
         <Select placeholder="Filter by Lifecycle Stage" allowClear style={{ width: 180 }} onChange={(v) => { const next = v ?? null; setSelectedLifecycleStage(next); applyFilters(searchText, selectedDietitianId, next, selectedFollowupStage, selectedLeadType); }} value={selectedLifecycleStage} options={LIFECYCLE_FILTER_OPTIONS} />
-        <Select placeholder="Filter by Followup Stage" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedFollowupStage(next); applyFilters(searchText, selectedDietitianId, selectedLifecycleStage, next, selectedLeadType); }} value={selectedFollowupStage} options={FOLLOWUP_STAGE_OPTIONS} />
+        <Select placeholder="Filter by follow-up stage" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedFollowupStage(next); applyFilters(searchText, selectedDietitianId, selectedLifecycleStage, next, selectedLeadType); }} value={selectedFollowupStage} options={FOLLOWUP_STAGE_OPTIONS} />
       </Space>
       <Table columns={columns} dataSource={filteredCustomers} loading={loading} rowKey="id" onRow={(record) => ({ onClick: () => void handleRowClick(record.id), style: { cursor: 'pointer' } })} pagination={{ pageSize: 20, showTotal: (total) => `Total ${total} customers` }} />
       <Drawer title="Customer 360 View" placement="right" size={720} open={drawerVisible} onClose={() => setDrawerVisible(false)}>

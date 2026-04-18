@@ -22,6 +22,8 @@ import {
 import { CheckCircleOutlined, CloseCircleOutlined, MailOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import CallButton from '@/components/dt/CallButton';
+import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
+import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 const { Text } = Typography;
 const MAX_REVIEW_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -296,12 +298,12 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
 
   const { followup, customer, attempts, previousFollowups = [] } = details;
 
-  const getFollowupTitle = (followupNumber: number) => `Follow-up ${followupNumber}`;
+  const getFollowupTitle = (followupNumber: number) => followupUiLabel(followupNumber);
 
   const sortedPreviousFollowups = [...previousFollowups].sort((a, b) => a.followup_number - b.followup_number);
 
   const connectedOptions: Array<{ label: string; value: ConnectedChoice }> =
-    followup.followup_number >= 3
+    followup.followup_number >= MAX_FOLLOWUP_NUMBER
       ? [
           { label: 'Reviewed', value: 'reviewed' },
           { label: 'Issue with product', value: 'issue_with_product' },
@@ -351,7 +353,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
           {sortedPreviousFollowups.length > 0 ? (
             <Card title="Previous Interactions" size="small" styles={{ body: { padding: '8px 12px' } }}>
               {sortedPreviousFollowups.map((pf, index) => {
-                const label = `Follow-up ${pf.followup_number}`;
+                const label = followupUiLabel(pf.followup_number);
                 const when = pf.connected_date ?? pf.updated_at;
                 return (
                   <div

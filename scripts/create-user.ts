@@ -3,6 +3,9 @@
  *
  * Usage:
  * npm run user:create -- --email "admin@test.com" --name "Test Admin" --role "admin" --password "Admin@123"
+ *
+ * Update password only (keeps name/role):
+ * npm run user:create -- --email "user@test.com" --password "NewSecret" --password-only
  */
 import { config } from 'dotenv';
 import { eq } from 'drizzle-orm';
@@ -14,6 +17,7 @@ type CliArgs = {
   name: string;
   role: string;
   password: string;
+  passwordOnly: boolean;
 };
 
 function getArg(flag: string): string | undefined {
@@ -27,6 +31,22 @@ function parseArgs(): CliArgs {
   const name = getArg('--name');
   const role = getArg('--role');
   const password = getArg('--password');
+  const passwordOnly = process.argv.includes('--password-only');
+
+  if (passwordOnly) {
+    if (!email || !password) {
+      throw new Error(
+        'Missing required args for --password-only. Use: --email <email> --password <password> --password-only'
+      );
+    }
+    return {
+      email: email.toLowerCase().trim(),
+      name: '',
+      role: '',
+      password,
+      passwordOnly: true,
+    };
+  }
 
   if (!email || !name || !role || !password) {
     throw new Error(
@@ -39,6 +59,7 @@ function parseArgs(): CliArgs {
     name: name.trim(),
     role: role.trim(),
     password,
+    passwordOnly: false,
   };
 }
 
@@ -54,6 +75,19 @@ async function main() {
   });
 
   if (existing) {
+    if (args.passwordOnly) {
+      await db
+        .update(users)
+        .set({
+          password_hash: passwordHash,
+          updated_at: new Date(),
+        })
+        .where(eq(users.id, existing.id));
+
+      console.log(`Updated password for: ${args.email}`);
+      return;
+    }
+
     await db
       .update(users)
       .set({
@@ -67,6 +101,10 @@ async function main() {
 
     console.log(`Updated user: ${args.email} (${args.role})`);
     return;
+  }
+
+  if (args.passwordOnly) {
+    throw new Error(`No user found for ${args.email}; create the user first with full --name and --role.`);
   }
 
   await db.insert(users).values({

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { App, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
+import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 const { Title, Paragraph } = Typography;
 
@@ -109,10 +110,10 @@ export default function DashboardCustomersPage() {
             render: (v: string) => <Tag>{v}</Tag>,
           },
           {
-            title: 'Follow-up #',
+            title: 'Follow-up stage',
             dataIndex: 'currentFollowupStage',
             key: 'currentFollowupStage',
-            render: (v: number | null) => (v === null ? '-' : v),
+            render: (v: number | null) => (v === null ? '-' : followupUiLabel(v)),
           },
           {
             title: 'LTV',
