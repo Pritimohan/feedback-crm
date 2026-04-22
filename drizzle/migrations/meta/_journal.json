@@ -8,6 +8,69 @@
       "when": 1776060921132,
       "tag": "0000_hard_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776148391765,
+      "tag": "0001_bumpy_joseph",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776157800000,
+      "tag": "0002_customer_first",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776161400000,
+      "tag": "0003_customer_analytics",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776165000000,
+      "tag": "0004_exotel_connect_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776174900000,
+      "tag": "0005_customer_external_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776179700000,
+      "tag": "0006_simplify_lifecycle_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776185100000,
+      "tag": "0007_orders_and_customer_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776335400000,
+      "tag": "0008_simplify_leads_remove_order_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776339000000,
+      "tag": "0009_customers_drop_serial_and_purchase_from",
+      "breakpoints": true
     }
   ]
 }

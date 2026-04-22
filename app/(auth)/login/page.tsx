@@ -32,7 +32,17 @@ function LoginForm() {
       }
 
       message.success('Login successful!');
-      router.push(redirectTo || '/dashboard');
+      if (redirectTo) {
+        router.push(redirectTo);
+      } else {
+        if (data.role === 'admin') {
+          router.push('/admin/dashboard');
+        } else if (data.role === 'dt') {
+          router.push('/dt/followups');
+        } else {
+          router.push('/login');
+        }
+      }
       router.refresh();
     } catch (error) {
       message.error('An error occurred during login');

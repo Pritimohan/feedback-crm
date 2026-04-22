@@ -1,16 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Layout, Menu, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import { DashboardOutlined, LogoutOutlined } from '@ant-design/icons';
+import {
+  TeamOutlined,
+  BarChartOutlined,
+  LogoutOutlined,
+  CrownOutlined,
+  PieChartOutlined,
+} from '@ant-design/icons';
 import { UserProfileDropdown } from '@/components/layout/UserProfileDropdown';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 
-export default function DashboardShellLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<{ name: string; role: string } | null>(null);
   const router = useRouter();
@@ -39,17 +45,31 @@ export default function DashboardShellLayout({ children }: { children: React.Rea
 
   const menuItems: MenuProps['items'] = [
     {
-      key: '/dashboard',
-      icon: <DashboardOutlined />,
-      label: 'Dashboard',
+      key: '/admin/analytics',
+      icon: <BarChartOutlined />,
+      label: 'Analytics',
+    },
+    {
+      key: '/admin/users',
+      icon: <CrownOutlined />,
+      label: 'User Management',
+    },
+    {
+      key: '/admin/call-distribution',
+      icon: <PieChartOutlined />,
+      label: 'Call Distribution',
+    },
+    {
+      key: '/admin/customers',
+      icon: <TeamOutlined />,
+      label: 'All Customers',
     },
   ];
+  const selectedKey = pathname;
 
   const handleMenuClick: MenuProps['onClick'] = (e) => {
     router.push(e.key);
   };
-
-  const selectedKey = pathname;
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#f4f2ed' }}>
@@ -59,10 +79,7 @@ export default function DashboardShellLayout({ children }: { children: React.Rea
         onCollapse={setCollapsed}
         theme="light"
         width={220}
-        style={{
-          background: '#ffffff',
-          boxShadow: '1px 0 0 rgba(0,0,0,0.08)',
-        }}
+        style={{ background: '#ffffff', boxShadow: '1px 0 0 rgba(0,0,0,0.08)' }}
       >
         <div
           style={{
@@ -76,7 +93,7 @@ export default function DashboardShellLayout({ children }: { children: React.Rea
             borderBottom: '0.5px solid rgba(0,0,0,0.08)',
           }}
         >
-          {!collapsed ? 'Feedback CRM' : 'FC'}
+          {!collapsed ? 'Fitty CRM' : 'FC'}
         </div>
         <Menu
           mode="inline"
@@ -100,7 +117,7 @@ export default function DashboardShellLayout({ children }: { children: React.Rea
           }}
         >
           <Text strong style={{ color: '#1d4838', fontSize: 15 }}>
-            Dashboard
+            Admin Dashboard
           </Text>
           <UserProfileDropdown user={user} menuItems={userMenuItems} />
         </Header>
