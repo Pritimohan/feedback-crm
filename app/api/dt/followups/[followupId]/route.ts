@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { getCrmBrandFromCookie } from '@/lib/crmBrand';
+import { leadDbBrandMatchesCrmFilter } from '@/lib/crmBrand.shared';
 import { getSession } from '@/lib/auth/session';
 import { getLeadFollowupDetails } from '@/lib/services/leadFollowupQueryService';
 
@@ -14,8 +16,9 @@ export async function GET(_request: Request, context: { params: Promise<{ follow
     }
 
     const { followupId } = await context.params;
+    const brand = await getCrmBrandFromCookie();
     const data = await getLeadFollowupDetails(followupId);
-    if (!data) {
+    if (!data || !leadDbBrandMatchesCrmFilter(data.lead.brand, brand)) {
       return NextResponse.json({ error: 'Followup not found' }, { status: 404 });
     }
 

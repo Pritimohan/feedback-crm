@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { and, eq, lte, sql } from 'drizzle-orm';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { users, leadLifecycleFollowups } from '@/lib/db/schema';
+import { users, leadLifecycleFollowups, leadLifecycles, leads } from '@/lib/db/schema';
 import { getDtLoadDistribution } from '@/lib/services/callDistributionService';
 
 function startOfDay(date: Date): Date {
@@ -24,6 +25,7 @@ export async function GET() {
 
   const todayStart = startOfDay(new Date());
   const todayEnd = endOfDay(new Date());
+  const brand = await getCrmBrandFromCookie();
 
   const activeDTs = await db
     .select({ id: users.id, name: users.name, email: users.email })
@@ -37,7 +39,15 @@ export async function GET() {
       todayDue: sql<number>`count(*) filter (where ${leadLifecycleFollowups.scheduled_date} >= ${todayStart} and ${leadLifecycleFollowups.scheduled_date} <= ${todayEnd})`,
     })
     .from(leadLifecycleFollowups)
-    .where(and(eq(leadLifecycleFollowups.status, 'pending'), lte(leadLifecycleFollowups.scheduled_date, todayEnd)))
+    .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
+    .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
+    .where(
+      and(
+        eq(leadLifecycleFollowups.status, 'pending'),
+        lte(leadLifecycleFollowups.scheduled_date, todayEnd),
+        leadMatchesCrmBrand(brand)
+      )
+    )
     .groupBy(leadLifecycleFollowups.assigned_dt_id);
 
   const byDt = new Map(rows.map((r) => [r.dtId ?? '', r]));
@@ -74,7 +84,7 @@ export async function GET() {
       const next = proposedDistribution[idx];
       return sum + Math.max(0, curr.todaysCalls - next.todaysCalls);
     }, 0),
-    loadSnapshot: await getDtLoadDistribution(),
+    loadSnapshot: await getDtLoadDistribution(undefined, brand),
   });
 }
 

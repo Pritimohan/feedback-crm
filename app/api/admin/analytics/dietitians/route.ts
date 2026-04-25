@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
+import { getCrmBrandFromCookie } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { sql } from 'drizzle-orm';
@@ -34,6 +35,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const brand = await getCrmBrandFromCookie();
+    const leadBrandCond =
+      brand === 'fitelo'
+        ? sql`AND l.brand = 'fitelo'`
+        : sql`AND (l.brand = 'fitty' OR l.brand IS NULL)`;
+
     const searchParams = request.nextUrl.searchParams;
     const filterType = (searchParams.get('filter') || 'today') as AnalyticsFilterType;
     const startDateParam = searchParams.get('startDate') ?? undefined;
@@ -63,6 +70,7 @@ export async function GET(request: NextRequest) {
         WHERE ol.status = 'active'
           AND l.assigned_dt_id IS NOT NULL
           AND l.activity_status = 'active'
+          ${leadBrandCond}
           AND (
             (lf.attempt_count = 0 AND lf.scheduled_date >= ${startStr}::timestamp AND lf.scheduled_date <= ${endStr}::timestamp)
             OR (lf.attempt_count > 0 AND lf.first_attempt_date IS NOT NULL

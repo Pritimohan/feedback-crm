@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getCrmBrandFromCookie } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { getActiveFollowupsForDt } from '@/lib/services/leadLifecycleEngine';
 
@@ -13,7 +14,8 @@ export async function GET() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const result = await getActiveFollowupsForDt(session.id);
+    const brand = await getCrmBrandFromCookie();
+    const result = await getActiveFollowupsForDt(session.id, new Date(), brand);
     return NextResponse.json(result);
   } catch (error) {
     console.error('Get active followups error:', error);

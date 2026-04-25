@@ -9,6 +9,7 @@ import {
   customers,
   users,
 } from '@/lib/db/schema';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { and, eq, gte, lte, desc } from 'drizzle-orm';
 import {
   getAnalyticsDateRange,
@@ -65,6 +66,8 @@ export async function GET(request: NextRequest) {
       endDateParam
     );
 
+    const brand = await getCrmBrandFromCookie();
+
     const rows = await db
       .select({
         customerName: customers.name,
@@ -87,6 +90,7 @@ export async function GET(request: NextRequest) {
         and(
           eq(leadLifecycles.status, 'active'),
           eq(leads.activity_status, 'active'),
+          leadMatchesCrmBrand(brand),
           gte(leadLifecycleFollowupAttempts.attempt_date, startDate),
           lte(leadLifecycleFollowupAttempts.attempt_date, endDate)
         )

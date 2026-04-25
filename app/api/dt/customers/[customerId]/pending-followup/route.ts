@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { and, asc, eq } from 'drizzle-orm';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { leadLifecycleFollowups, leadLifecycles, leads } from '@/lib/db/schema';
@@ -15,6 +16,7 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
     }
 
     const { customerId } = await context.params;
+    const brand = await getCrmBrandFromCookie();
 
     const [row] = await db
       .select({
@@ -28,7 +30,8 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
           eq(leads.customer_id, customerId),
           eq(leads.assigned_dt_id, session.id),
           eq(leadLifecycles.status, 'active'),
-          eq(leadLifecycleFollowups.status, 'pending')
+          eq(leadLifecycleFollowups.status, 'pending'),
+          leadMatchesCrmBrand(brand)
         )
       )
       .orderBy(asc(leadLifecycleFollowups.scheduled_date));

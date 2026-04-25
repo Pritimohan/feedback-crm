@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { and, eq, ne, gte, lte, lt, sql, isNotNull, gt, or, isNull } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
@@ -54,6 +55,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const brand = await getCrmBrandFromCookie();
+
     const filterParam = request.nextUrl.searchParams.get('filter');
     const dateParam = request.nextUrl.searchParams.get('date');
     const endDateParam = request.nextUrl.searchParams.get('endDate');
@@ -80,7 +83,8 @@ export async function GET(request: NextRequest) {
       eq(leadLifecycleFollowups.status, 'pending'),
       eq(leadLifecycles.status, 'active'),
       eq(leads.activity_status, 'active'),
-      isNotNull(leadLifecycleFollowups.assigned_dt_id)
+      isNotNull(leadLifecycleFollowups.assigned_dt_id),
+      leadMatchesCrmBrand(brand)
     );
 
     const newDueRows = await db
@@ -187,6 +191,7 @@ export async function GET(request: NextRequest) {
     const attemptDayWhere = and(
       eq(leadLifecycles.status, 'active'),
       eq(leads.activity_status, 'active'),
+      leadMatchesCrmBrand(brand),
       gte(leadLifecycleFollowupAttempts.attempt_date, dayStart),
       lte(leadLifecycleFollowupAttempts.attempt_date, dayEnd)
     );
@@ -252,11 +257,18 @@ export async function GET(request: NextRequest) {
         n: sql<number>`cast(count(*) as int)`,
       })
       .from(leadLifecycleFollowupAttempts)
+      .innerJoin(
+        leadLifecycleFollowups,
+        eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
+      )
+      .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
+      .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
       .where(
         and(
           eq(leadLifecycleFollowupAttempts.was_overdue, true),
           gte(leadLifecycleFollowupAttempts.attempt_date, dayStart),
-          lte(leadLifecycleFollowupAttempts.attempt_date, dayEnd)
+          lte(leadLifecycleFollowupAttempts.attempt_date, dayEnd),
+          leadMatchesCrmBrand(brand)
         )
       )
       .groupBy(leadLifecycleFollowupAttempts.dt_id);
@@ -319,6 +331,7 @@ export async function GET(request: NextRequest) {
           eq(leadLifecycles.status, 'active'),
           eq(leads.activity_status, 'active'),
           isNotNull(leadLifecycleFollowups.assigned_dt_id),
+          leadMatchesCrmBrand(brand),
           lt(leadLifecycleFollowups.scheduled_date, dayStart)
         )
       )

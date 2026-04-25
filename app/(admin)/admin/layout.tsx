@@ -12,6 +12,7 @@ import {
   PieChartOutlined,
 } from '@ant-design/icons';
 import { UserProfileDropdown } from '@/components/layout/UserProfileDropdown';
+import { BrandSwitcher } from '@/components/layout/BrandSwitcher';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -83,7 +84,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       >
         <div
           style={{
-            height: 64,
+            minHeight: 64,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -93,7 +94,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             borderBottom: '0.5px solid rgba(0,0,0,0.08)',
           }}
         >
-          {!collapsed ? 'Fitty CRM' : 'FC'}
+          <BrandSwitcher collapsed={collapsed} />
         </div>
         <Menu
           mode="inline"

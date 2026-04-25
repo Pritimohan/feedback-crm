@@ -18,6 +18,8 @@ import {
   type NonConnectedOutcome,
   validateConnectedChoicePayload,
 } from '@/lib/lifecycle/leadLifecycleValidation';
+import type { CrmBrand } from '@/lib/crmBrand.shared';
+import { leadMatchesCrmBrand } from '@/lib/crmBrand';
 import {
   computeRetrySchedule,
   DEFAULT_LEAD_LIFECYCLE_TEMPLATE,
@@ -448,7 +450,7 @@ export async function recordConnectedOutcome(params: {
   });
 }
 
-export async function getActiveFollowupsForDt(dtId: string, date: Date = new Date()) {
+export async function getActiveFollowupsForDt(dtId: string, date: Date = new Date(), brand: CrmBrand = 'fitty') {
   const start = startOfDay(date);
   const now = date;
 
@@ -468,7 +470,8 @@ export async function getActiveFollowupsForDt(dtId: string, date: Date = new Dat
         eq(leadLifecycleFollowups.assigned_dt_id, dtId),
         eq(leadLifecycles.status, 'active'),
         eq(leadLifecycleFollowups.status, 'pending'),
-        lte(leadLifecycleFollowups.scheduled_date, now)
+        lte(leadLifecycleFollowups.scheduled_date, now),
+        leadMatchesCrmBrand(brand)
       )
     );
 

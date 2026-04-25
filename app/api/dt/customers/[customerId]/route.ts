@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { callLogs, customers, leads, orders, users } from '@/lib/db/schema';
@@ -15,6 +16,7 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
     }
 
     const { customerId } = await context.params;
+    const brand = await getCrmBrandFromCookie();
 
     const [customerRow] = await db
       .select({
@@ -42,7 +44,7 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         variant: leads.variant,
       })
       .from(leads)
-      .where(eq(leads.customer_id, customerId))
+      .where(and(eq(leads.customer_id, customerId), leadMatchesCrmBrand(brand)))
       .orderBy(desc(leads.created_at));
 
     const customerOrders = await db
@@ -68,9 +70,10 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         dtName: users.name,
       })
       .from(callLogs)
+      .innerJoin(leads, eq(callLogs.lead_id, leads.id))
       .leftJoin(users, eq(callLogs.dt_id, users.id))
-      .where(eq(callLogs.customer_id, customerId))
-      .orderBy(desc(callLogs.created_at));
+      .where(and(eq(callLogs.customer_id, customerId), leadMatchesCrmBrand(brand)))
+      .orderBy(asc(callLogs.created_at));
 
     const ltv = customerOrders.reduce((sum, row) => sum + Number(row.totalAmount ?? 0), 0);
 

@@ -1,33 +1,43 @@
 import { NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { users, leads, orders, leadLifecycleFollowups } from '@/lib/db/schema';
+import { users, leads, orders, leadLifecycleFollowups, leadLifecycles } from '@/lib/db/schema';
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { id } = await context.params;
+  const brand = await getCrmBrandFromCookie();
 
   const [user] = await db.select({ id: users.id }).from(users).where(and(eq(users.id, id), eq(users.role, 'dt')));
   if (!user) return NextResponse.json({ error: 'Dietitian not found' }, { status: 404 });
 
   const [leadAgg, orderAgg, taskAgg] = await Promise.all([
-    db.select({
-      total: sql<number>`count(*)`,
-      active: sql<number>`count(*) filter (where ${leads.activity_status} = 'active')`,
-      inactive: sql<number>`count(*) filter (where ${leads.activity_status} = 'inactive')`,
-    }).from(leads).where(eq(leads.assigned_dt_id, id)),
+    db
+      .select({
+        total: sql<number>`count(*)`,
+        active: sql<number>`count(*) filter (where ${leads.activity_status} = 'active')`,
+        inactive: sql<number>`count(*) filter (where ${leads.activity_status} = 'inactive')`,
+      })
+      .from(leads)
+      .where(and(eq(leads.assigned_dt_id, id), leadMatchesCrmBrand(brand))),
     db.select({
       totalOrders: sql<number>`count(*)`,
       totalRevenue: sql<number>`coalesce(sum(${orders.total_amount}),0)`,
       newOrdersThisMonth: sql<number>`count(*) filter (where date_trunc('month', ${orders.order_date}) = date_trunc('month', now()))`,
     }).from(orders),
-    db.select({
-      pending: sql<number>`count(*) filter (where ${leadLifecycleFollowups.status} = 'pending')`,
-      completedThisMonth: sql<number>`count(*) filter (where ${leadLifecycleFollowups.status} = 'connected' and date_trunc('month', ${leadLifecycleFollowups.updated_at}) = date_trunc('month', now()))`,
-    }).from(leadLifecycleFollowups).where(eq(leadLifecycleFollowups.assigned_dt_id, id)),
+    db
+      .select({
+        pending: sql<number>`count(*) filter (where ${leadLifecycleFollowups.status} = 'pending')`,
+        completedThisMonth: sql<number>`count(*) filter (where ${leadLifecycleFollowups.status} = 'connected' and date_trunc('month', ${leadLifecycleFollowups.updated_at}) = date_trunc('month', now()))`,
+      })
+      .from(leadLifecycleFollowups)
+      .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
+      .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
+      .where(and(eq(leadLifecycleFollowups.assigned_dt_id, id), leadMatchesCrmBrand(brand))),
   ]);
 
   const totalCustomers = Number(leadAgg[0]?.total ?? 0);
