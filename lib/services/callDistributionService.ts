@@ -1,4 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
+import type { CrmBrand } from '@/lib/crmBrand.shared';
+import { leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { db, type FeedbackDbTransaction } from '@/lib/db';
 import { leads, users } from '@/lib/db/schema';
 
@@ -49,9 +51,13 @@ export async function selectLeastLoadedDt(
 }
 
 export async function getDtLoadDistribution(
-  tx?: FeedbackDbTransaction
+  tx?: FeedbackDbTransaction,
+  brand?: CrmBrand
 ): Promise<DistributionDtLoad[]> {
   const d = tx ?? db;
+  const joinOn = brand
+    ? and(eq(leads.assigned_dt_id, users.id), leadMatchesCrmBrand(brand))
+    : eq(leads.assigned_dt_id, users.id);
   const rows = await d
     .select({
       dtId: users.id,
@@ -59,7 +65,7 @@ export async function getDtLoadDistribution(
       assignedCount: sql<number>`COUNT(${leads.id})`,
     })
     .from(users)
-    .leftJoin(leads, eq(leads.assigned_dt_id, users.id))
+    .leftJoin(leads, joinOn)
     .where(and(eq(users.role, 'dt'), eq(users.active_status, true)))
     .groupBy(users.id, users.name);
 

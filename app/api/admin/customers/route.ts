@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { desc, inArray, sql } from 'drizzle-orm';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { customers, leads, orders } from '@/lib/db/schema';
@@ -8,6 +9,23 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const brand = await getCrmBrandFromCookie();
+
+  const leadRows = await db
+    .select({
+      customerId: leads.customer_id,
+      activityStatus: leads.activity_status,
+      currentFollowupNumber: leads.current_followup_number,
+      leadType: leads.lead_type,
+      updatedAt: leads.updated_at,
+    })
+    .from(leads)
+    .where(leadMatchesCrmBrand(brand))
+    .orderBy(desc(leads.updated_at));
+
+  const customerIds = Array.from(new Set(leadRows.map((r) => r.customerId)));
+  if (!customerIds.length) return NextResponse.json({ customers: [] });
 
   const baseCustomers = await db
     .select({
@@ -19,20 +37,8 @@ export async function GET() {
       createdAt: customers.created_at,
     })
     .from(customers)
+    .where(inArray(customers.id, customerIds))
     .orderBy(desc(customers.created_at));
-
-  const customerIds = baseCustomers.map((c) => c.id);
-  if (!customerIds.length) return NextResponse.json({ customers: [] });
-
-  const leadRows = await db
-    .select({
-      customerId: leads.customer_id,
-      activityStatus: leads.activity_status,
-      currentFollowupNumber: leads.current_followup_number,
-      leadType: leads.lead_type,
-    })
-    .from(leads)
-    .where(inArray(leads.customer_id, customerIds));
 
   const orderAggRows = await db
     .select({

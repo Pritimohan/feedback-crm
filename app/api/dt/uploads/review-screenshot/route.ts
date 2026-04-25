@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCrmBrandFromCookie } from '@/lib/crmBrand';
+import { leadDbBrandMatchesCrmFilter } from '@/lib/crmBrand.shared';
 import { getSession } from '@/lib/auth/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import { getLeadFollowupDetails } from '@/lib/services/leadFollowupQueryService';
 
 const BUCKET_NAME = 'review-screenshots';
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
@@ -38,6 +41,14 @@ export async function POST(request: NextRequest) {
     }
     if (upload.size > MAX_UPLOAD_SIZE_BYTES) {
       return NextResponse.json({ error: 'Image size must be 10MB or less' }, { status: 400 });
+    }
+
+    if (followupId) {
+      const brand = await getCrmBrandFromCookie();
+      const detail = await getLeadFollowupDetails(followupId);
+      if (!detail || !leadDbBrandMatchesCrmFilter(detail.lead.brand, brand)) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
     }
 
     const supabase = getSupabaseServiceClient();

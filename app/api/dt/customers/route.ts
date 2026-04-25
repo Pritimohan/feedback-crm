@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { customers, leads, orders } from '@/lib/db/schema';
@@ -14,6 +15,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const brand = await getCrmBrandFromCookie();
     const leadRows = await db
       .select({
         customerId: leads.customer_id,
@@ -24,7 +26,11 @@ export async function GET() {
         updatedAt: leads.updated_at,
       })
       .from(leads)
-      .where(session.role === 'admin' ? undefined : eq(leads.assigned_dt_id, session.id))
+      .where(
+        session.role === 'admin'
+          ? leadMatchesCrmBrand(brand)
+          : and(eq(leads.assigned_dt_id, session.id), leadMatchesCrmBrand(brand))
+      )
       .orderBy(desc(leads.updated_at));
 
     const customerIds = Array.from(new Set(leadRows.map((row) => row.customerId)));

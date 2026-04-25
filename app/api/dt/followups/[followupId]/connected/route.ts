@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCrmBrandFromCookie } from '@/lib/crmBrand';
+import { leadDbBrandMatchesCrmFilter } from '@/lib/crmBrand.shared';
 import { getSession } from '@/lib/auth/session';
 import { isConnectedChoice, type ConnectedChoicePayload } from '@/lib/lifecycle/leadLifecycleValidation';
 import { recordConnectedOutcome } from '@/lib/services/leadLifecycleEngine';
+import { getLeadFollowupDetails } from '@/lib/services/leadFollowupQueryService';
 
 interface ConnectedBody {
   choice: string;
@@ -21,6 +24,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ fo
     }
 
     const { followupId } = await context.params;
+    const brand = await getCrmBrandFromCookie();
+    const existing = await getLeadFollowupDetails(followupId);
+    if (!existing || !leadDbBrandMatchesCrmFilter(existing.lead.brand, brand)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
     const body = (await request.json()) as ConnectedBody;
 
     if (!isConnectedChoice(body.choice)) {

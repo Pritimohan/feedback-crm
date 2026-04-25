@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import {
@@ -16,8 +17,6 @@ import {
   type AnalyticsFilterType,
 } from '@/lib/utils/analyticsDates';
 
-const activeLeadFilter = and(eq(leads.activity_status, 'active'), isNotNull(leads.assigned_dt_id));
-
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
@@ -29,6 +28,13 @@ export async function GET(request: NextRequest) {
     if (session.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    const brand = await getCrmBrandFromCookie();
+    const activeLeadFilter = and(
+      eq(leads.activity_status, 'active'),
+      isNotNull(leads.assigned_dt_id),
+      leadMatchesCrmBrand(brand)
+    );
 
     const searchParams = request.nextUrl.searchParams;
     const filterType = (searchParams.get('filter') || 'today') as AnalyticsFilterType;
@@ -208,6 +214,11 @@ export async function GET(request: NextRequest) {
               AND l.assigned_dt_id IS NOT NULL
               AND u.role = 'dt'
               AND u.active_status = true
+              ${
+                brand === 'fitelo'
+                  ? sql`AND l.brand = 'fitelo'`
+                  : sql`AND (l.brand = 'fitty' OR l.brand IS NULL)`
+              }
               AND fa.attempt_date >= ${startStr}
               AND fa.attempt_date <= ${endStr}
               AND (

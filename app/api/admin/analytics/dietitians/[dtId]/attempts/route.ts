@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { and, desc, eq, gte, lte } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
@@ -48,6 +49,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ dtI
       endDateParam
     );
 
+    const brand = await getCrmBrandFromCookie();
+
     const rows = await db
       .select({
         attemptId: leadLifecycleFollowupAttempts.id,
@@ -69,6 +72,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ dtI
         and(
           eq(leadLifecycleFollowupAttempts.dt_id, dtId),
           eq(leadLifecycles.status, 'active'),
+          leadMatchesCrmBrand(brand),
           gte(leadLifecycleFollowupAttempts.attempt_date, startDate),
           lte(leadLifecycleFollowupAttempts.attempt_date, endDate)
         )

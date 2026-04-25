@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { callLogs, customers, leadLifecycleFollowups, leads, users } from '@/lib/db/schema';
+import { callLogs, leadLifecycleFollowups, leadLifecycles, leads, users } from '@/lib/db/schema';
 import { getDtLoadDistribution } from '@/lib/services/callDistributionService';
 
 export async function GET() {
@@ -10,21 +11,29 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
+  const brand = await getCrmBrandFromCookie();
+
   const [customerCounts, leadCounts, callCounts, dtCounts, pendingFollowups, connectedCalls] =
     await Promise.all([
-      db.select({ total: sql<number>`count(*)` }).from(customers),
+      db
+        .select({ total: sql<number>`count(distinct ${leads.customer_id})` })
+        .from(leads)
+        .where(leadMatchesCrmBrand(brand)),
       db
         .select({
           active: sql<number>`count(*) filter (where ${leads.activity_status} = 'active')`,
           deferred: sql<number>`count(*) filter (where ${leads.activity_status} = 'deferred')`,
           inactive: sql<number>`count(*) filter (where ${leads.activity_status} = 'inactive')`,
         })
-        .from(leads),
+        .from(leads)
+        .where(leadMatchesCrmBrand(brand)),
       db
         .select({
           totalToday: sql<number>`count(*) filter (where ${callLogs.created_at} >= date_trunc('day', now()))`,
         })
-        .from(callLogs),
+        .from(callLogs)
+        .innerJoin(leads, eq(callLogs.lead_id, leads.id))
+        .where(leadMatchesCrmBrand(brand)),
       db
         .select({
           totalDt: sql<number>`count(*) filter (where ${users.role} = 'dt')`,
@@ -34,15 +43,19 @@ export async function GET() {
       db
         .select({ total: sql<number>`count(*)` })
         .from(leadLifecycleFollowups)
-        .where(eq(leadLifecycleFollowups.status, 'pending')),
+        .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
+        .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
+        .where(and(eq(leadLifecycleFollowups.status, 'pending'), leadMatchesCrmBrand(brand))),
       db
         .select({
           connectedToday: sql<number>`count(*) filter (where ${callLogs.created_at} >= date_trunc('day', now()) and ${callLogs.attempt_outcome} = 'connected')`,
         })
-        .from(callLogs),
+        .from(callLogs)
+        .innerJoin(leads, eq(callLogs.lead_id, leads.id))
+        .where(leadMatchesCrmBrand(brand)),
     ]);
 
-  const dtLoad = await getDtLoadDistribution();
+  const dtLoad = await getDtLoadDistribution(undefined, brand);
   const totalToday = Number(callCounts[0]?.totalToday ?? 0);
   const connectedToday = Number(connectedCalls[0]?.connectedToday ?? 0);
 
