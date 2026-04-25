@@ -33,7 +33,7 @@ export function getConnectedChoicesForStage(followupNumber: number): ConnectedCh
     return ['reviewed', 'issue_with_product', 'dont_reviewed'];
   }
 
-  return [...CONNECTED_CHOICES];
+  return ['reviewed', 'issue_with_product', 'interested'];
 }
 
 export interface ConnectedChoicePayload {

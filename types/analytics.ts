@@ -32,6 +32,7 @@ export interface AnalyticsData {
   counselling: AnalyticsSection;
   firstFollowup: AnalyticsSection;
   secondFollowup: AnalyticsSection;
+  thirdFollowup: AnalyticsSection;
   activity: {
     attempts: number;
     uniqueCustomersCalled: number;
@@ -57,6 +58,7 @@ export interface RescheduledDueTodayByStage {
   counselling: number;
   fu1: number;
   fu2: number;
+  fu3: number;
 }
 
 export interface DietitianAnalyticsRow {
@@ -80,6 +82,8 @@ export interface DietitianAnalyticsRow {
   fu1Att: number;
   fu2Conn: number;
   fu2Att: number;
+  fu3Conn: number;
+  fu3Att: number;
   unreachablePct: number;
   tToCallHours: number;
 }

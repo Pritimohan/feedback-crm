@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { asc, desc, eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { callLogs, customers, leads, orders, users } from '@/lib/db/schema';
@@ -37,6 +37,9 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         leadType: leads.lead_type,
         activityStatus: leads.activity_status,
         currentFollowupNumber: leads.current_followup_number,
+        source: leads.source,
+        purchaseDate: leads.purchase_date,
+        variant: leads.variant,
       })
       .from(leads)
       .where(eq(leads.customer_id, customerId))
@@ -67,7 +70,7 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
       .from(callLogs)
       .leftJoin(users, eq(callLogs.dt_id, users.id))
       .where(eq(callLogs.customer_id, customerId))
-      .orderBy(asc(callLogs.created_at));
+      .orderBy(desc(callLogs.created_at));
 
     const ltv = customerOrders.reduce((sum, row) => sum + Number(row.totalAmount ?? 0), 0);
 
@@ -81,6 +84,9 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         assignedDtId: leadRow?.assignedDtId ?? null,
         currentLifecycleStage: leadRow?.activityStatus ?? 'inactive',
         currentFollowupStage: leadRow?.currentFollowupNumber ?? null,
+        source: leadRow?.source ?? null,
+        purchaseDate: leadRow?.purchaseDate ?? null,
+        variant: leadRow?.variant ?? null,
         ltvScore: String(ltv),
         createdAt: customerRow.createdAt,
       },

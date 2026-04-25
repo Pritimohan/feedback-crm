@@ -81,6 +81,10 @@ export default function CallButton({
     setModalOpen(true);
   };
 
+  const stopRowClickPropagation = (event: React.SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
   const handleModalOk = async () => {
     const trimmed = modalValue.trim();
     if (!trimmed) {
@@ -102,6 +106,9 @@ export default function CallButton({
           size="small"
           icon={<PhoneOutlined />}
           loading={loading}
+          onMouseDown={stopRowClickPropagation}
+          onPointerDown={stopRowClickPropagation}
+          onKeyDown={stopRowClickPropagation}
           onClick={handleClick}
           {...buttonProps}
         />

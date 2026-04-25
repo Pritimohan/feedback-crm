@@ -30,6 +30,9 @@ export async function GET() {
       activityStatus: leads.activity_status,
       currentFollowupNumber: leads.current_followup_number,
       leadType: leads.lead_type,
+      source: leads.source,
+      purchaseDate: leads.purchase_date,
+      variant: leads.variant,
     })
     .from(leads)
     .where(inArray(leads.customer_id, customerIds));
@@ -50,6 +53,9 @@ export async function GET() {
       activityStatus: string;
       currentFollowupNumber: number;
       leadType: string;
+      source: string | null;
+      purchaseDate: string | null;
+      variant: string | null;
     }
   >();
   for (const row of leadRows) {
@@ -58,6 +64,9 @@ export async function GET() {
         activityStatus: row.activityStatus,
         currentFollowupNumber: row.currentFollowupNumber ?? 0,
         leadType: row.leadType,
+        source: row.source ?? null,
+        purchaseDate: row.purchaseDate ?? null,
+        variant: row.variant ?? null,
       });
     }
   }
@@ -81,6 +90,9 @@ export async function GET() {
     currentLifecycleStage: leadByCustomer.get(customer.id)?.activityStatus ?? 'inactive',
     currentFollowupStage: leadByCustomer.get(customer.id)?.currentFollowupNumber ?? null,
     leadType: leadByCustomer.get(customer.id)?.leadType ?? null,
+    source: leadByCustomer.get(customer.id)?.source ?? null,
+    purchaseDate: leadByCustomer.get(customer.id)?.purchaseDate ?? null,
+    variant: leadByCustomer.get(customer.id)?.variant ?? null,
     ltvScore: orderByCustomer.get(customer.id)?.totalAmount ?? '0',
     lastOrderDate: orderByCustomer.get(customer.id)?.lastOrderDate ?? null,
     createdAt: customer.createdAt,

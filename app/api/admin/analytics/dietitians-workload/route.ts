@@ -19,10 +19,10 @@ dayjs.extend(timezone);
 
 const TZ = process.env.ANALYTICS_TIMEZONE || 'Asia/Kolkata';
 
-type StageKey = 'counselling' | 'fu1' | 'fu2';
+type StageKey = 'counselling' | 'fu1' | 'fu2' | 'fu3';
 
 function emptyStageSets(): Record<StageKey, Set<string>> {
-  return { counselling: new Set(), fu1: new Set(), fu2: new Set() };
+  return { counselling: new Set(), fu1: new Set(), fu2: new Set(), fu3: new Set() };
 }
 
 function setsToCounts(s: Record<StageKey, Set<string>>): Record<StageKey, number> {
@@ -30,14 +30,16 @@ function setsToCounts(s: Record<StageKey, Set<string>>): Record<StageKey, number
     counselling: s.counselling.size,
     fu1: s.fu1.size,
     fu2: s.fu2.size,
+    fu3: s.fu3.size,
   };
 }
 
-/** Final stage is followup_number 2; legacy rows with fn > 2 roll into fu2 for workload breakdown. */
+/** Stage buckets for followup_number 0..3. */
 function stageKey(n: number): StageKey {
   if (n === 0) return 'counselling';
   if (n === 1) return 'fu1';
-  return 'fu2';
+  if (n === 2) return 'fu2';
+  return 'fu3';
 }
 
 export async function GET(request: NextRequest) {
