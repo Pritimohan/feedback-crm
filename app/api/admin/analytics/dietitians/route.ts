@@ -126,6 +126,8 @@ export async function GET(request: NextRequest) {
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 1) AS fu1_att,
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 2 AND LOWER(a.outcome) = 'connected') AS fu2_conn,
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 2) AS fu2_att,
+          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 3 AND LOWER(a.outcome) = 'connected') AS fu3_conn,
+          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 3) AS fu3_att,
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND LOWER(a.outcome) IN ('cnr','no_answer','wrong_number','failed','unreachable','not_interested')) AS unreachable_count,
           (SELECT AVG(EXTRACT(EPOCH FROM (lp.first_attempt_date - lp.scheduled_date))/3600)
            FROM lead_pool lp
@@ -147,6 +149,8 @@ export async function GET(request: NextRequest) {
       const connected = Number(row.connected ?? 0);
       const fu2Conn = Number(row.fu2_conn ?? 0);
       const fu2Att = Number(row.fu2_att ?? 0);
+      const fu3Conn = Number(row.fu3_conn ?? 0);
+      const fu3Att = Number(row.fu3_att ?? 0);
       const unreachableCount = Number(row.unreachable_count ?? 0);
 
       return {
@@ -163,6 +167,8 @@ export async function GET(request: NextRequest) {
         fu1Att: Number(row.fu1_att ?? 0),
         fu2Conn,
         fu2Att,
+        fu3Conn,
+        fu3Att,
         unreachablePct: attempted > 0 ? Math.round((unreachableCount / attempted) * 100) : 0,
         tToCallHours: parseFloat(Number(row.ttc_avg ?? 0).toFixed(1)),
       };
@@ -193,6 +199,8 @@ export async function GET(request: NextRequest) {
           fu1Att: 0,
           fu2Conn: 0,
           fu2Att: 0,
+          fu3Conn: 0,
+          fu3Att: 0,
           unreachablePct: 0,
           tToCallHours: 0,
         });

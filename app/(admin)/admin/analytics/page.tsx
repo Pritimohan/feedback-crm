@@ -109,11 +109,11 @@ export default function AnalyticsPage() {
         overdue: number;
         newDueToday?: number;
         rescheduledDueToday?: number;
-        rescheduledDueTodayByStage?: { counselling: number; fu1: number; fu2: number };
+        rescheduledDueTodayByStage?: { counselling: number; fu1: number; fu2: number; fu3: number };
         overdueDueToday?: number;
-        overdueByStage?: { counselling: number; fu1: number; fu2: number };
+        overdueByStage?: { counselling: number; fu1: number; fu2: number; fu3: number };
         overdueAttempted?: number;
-        overdueAttemptedByStage?: { counselling: number; fu1: number; fu2: number };
+        overdueAttemptedByStage?: { counselling: number; fu1: number; fu2: number; fu3: number };
         callsAttempted?: number;
         callsConnected?: number;
       };
@@ -224,6 +224,7 @@ export default function AnalyticsPage() {
   const c = analyticsData?.counselling ?? null;
   const f1 = analyticsData?.firstFollowup ?? null;
   const f2 = analyticsData?.secondFollowup ?? null;
+  const f3 = analyticsData?.thirdFollowup ?? null;
 
   const totalRescheduledLeads = dietitianData.reduce(
     (s, d) => s + (d.rescheduledDueToday ?? 0),
@@ -233,9 +234,9 @@ export default function AnalyticsPage() {
   /** Distinct leads in pool for the selected range (not sum of new + rescheduled followup rows). */
   const totalLeads = dietitianData.reduce((s, d) => s + (d.leads ?? 0), 0);
   const totalAttempted =
-    (c?.attempted ?? 0) + (f1?.attempted ?? 0) + (f2?.attempted ?? 0);
+    (c?.attempted ?? 0) + (f1?.attempted ?? 0) + (f2?.attempted ?? 0) + (f3?.attempted ?? 0);
   const totalConnected =
-    (c?.connected ?? 0) + (f1?.connected ?? 0) + (f2?.connected ?? 0);
+    (c?.connected ?? 0) + (f1?.connected ?? 0) + (f2?.connected ?? 0) + (f3?.connected ?? 0);
   const totalCounselled = c?.connected ?? 0;
   const uniqueAttempted = analyticsData?.activity?.uniqueCustomersCalled ?? 0;
   const uniqueConnected = analyticsData?.activity?.uniqueCustomersConnected ?? 0;
@@ -306,6 +307,14 @@ export default function AnalyticsPage() {
       sale: 0,
       color: '#E7580B',
     },
+    {
+      label: followupStageLabel(3),
+      obj: 'Final close-out',
+      att: f3?.attempted ?? 0,
+      conn: f3?.connected ?? 0,
+      sale: 0,
+      color: '#8A2BE2',
+    },
   ];
 
   const followupStages = [
@@ -348,6 +357,19 @@ export default function AnalyticsPage() {
       color: '#E7580B',
       showConverted: true,
     },
+    {
+      name: followupStageLabel(3),
+      objective: 'Final close-out call',
+      mainPct: f3 ? (f3.connected > 0 ? pct(0, f3.connected) : 0) : 0,
+      target: 50,
+      statLabel: 'Close-out conv.',
+      attempted: f3?.attempted ?? 0,
+      connected: f3?.connected ?? 0,
+      converted: 0,
+      onTarget: true,
+      color: '#8A2BE2',
+      showConverted: true,
+    },
   ];
 
   const stageComparisonData = [
@@ -367,6 +389,12 @@ export default function AnalyticsPage() {
       name: followupStageLabel(2),
       attempted: f2?.attempted ?? 0,
       connected: f2?.connected ?? 0,
+      converted: 0,
+    },
+    {
+      name: followupStageLabel(3),
+      attempted: f3?.attempted ?? 0,
+      connected: f3?.connected ?? 0,
       converted: 0,
     },
   ];

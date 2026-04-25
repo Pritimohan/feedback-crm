@@ -7,6 +7,7 @@ const COHORT_ITEMS = [
   { label: `Pending ${followupStageLabel(0)}`, count: 0, sublabel: 'leads in queue', color: '#1D4838' },
   { label: `Pending ${followupStageLabel(1)}`, count: 0, sublabel: 'leads in queue', color: '#134175' },
   { label: `Pending ${followupStageLabel(2)}`, count: 0, sublabel: 'leads in queue', color: '#E7580B' },
+  { label: `Pending ${followupStageLabel(3)}`, count: 0, sublabel: 'leads in queue', color: '#8A2BE2' },
   { label: 'Alternate channel (e.g. WhatsApp)', count: 0, sublabel: 'placeholder', color: '#88CEEB' },
 ];
 

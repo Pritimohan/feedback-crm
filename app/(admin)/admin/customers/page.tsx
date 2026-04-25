@@ -18,11 +18,14 @@ import {
   Tooltip,
   Select,
   theme,
+  Dropdown,
+  Button,
 } from 'antd';
+import type { MenuProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { UserOutlined, PhoneOutlined, MailOutlined, DollarOutlined, ShoppingOutlined } from '@ant-design/icons';
+import { UserOutlined, PhoneOutlined, MailOutlined, DollarOutlined, ShoppingOutlined, EllipsisOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import CallButton from '@/components/dt/CallButton';
+import FollowupModal from '@/components/dt/FollowupModal';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 const { Title, Paragraph, Text } = Typography;
@@ -46,6 +49,9 @@ export default function AllCustomersPage() {
   const [selectedLifecycleStage, setSelectedLifecycleStage] = useState<string | null>(null);
   const [selectedFollowupStage, setSelectedFollowupStage] = useState<number | null>(null);
   const [selectedLeadType, setSelectedLeadType] = useState<'review' | 'nps' | null>('review');
+  const [selectedFollowupId, setSelectedFollowupId] = useState<string | null>(null);
+  const [followupModalVisible, setFollowupModalVisible] = useState(false);
+  const [openingFollowupForCustomerId, setOpeningFollowupForCustomerId] = useState<string | null>(null);
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const FOLLOWUP_STAGE_OPTIONS = [
@@ -94,11 +100,61 @@ export default function AllCustomersPage() {
     catch (error) { console.error('Error fetching customer history:', error); message.error('Failed to load customer details'); }
     finally { setHistoryLoading(false); }
   };
+
+  const openPendingFollowup = async (customerId: string) => {
+    try {
+      setOpeningFollowupForCustomerId(customerId);
+      const response = await fetch(`/api/dt/customers/${customerId}/pending-followup`);
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.error || 'Failed to fetch pending follow-up');
+      }
+      if (!result?.followupId) {
+        message.info('No pending follow-up for this customer.');
+        return;
+      }
+      setSelectedFollowupId(result.followupId);
+      setFollowupModalVisible(true);
+    } catch (error) {
+      console.error('Error opening pending follow-up:', error);
+      message.error(error instanceof Error ? error.message : 'Failed to open follow-up');
+    } finally {
+      setOpeningFollowupForCustomerId(null);
+    }
+  };
   const getLifecycleColor = (stage: string) => stage === 'active' ? '#1d4838' : stage === 'deferred' ? '#d48806' : 'default';
 
   const columns: ColumnsType<Customer> = [
     { title: 'Name', dataIndex: 'name', key: 'name', render: (name: string) => <Space><UserOutlined /><strong>{name}</strong></Space> },
-    { title: 'Contact', key: 'contact', render: (_, record) => <Space direction="vertical" size={0}><Space><Text><PhoneOutlined /> {record.phone}</Text><CallButton customerPhone={record.phone} customerId={record.id} /></Space>{record.email && <Text type="secondary" style={{ fontSize: '12px' }}><MailOutlined /> {record.email}</Text>}</Space> },
+    { title: 'Contact', key: 'contact', render: (_, record) => <Space direction="vertical" size={0}><Text><PhoneOutlined /> {record.phone}</Text>{record.email && <Text type="secondary" style={{ fontSize: '12px' }}><MailOutlined /> {record.email}</Text>}</Space> },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 80,
+      render: (_, record) => {
+        const menuItems: MenuProps['items'] = [{ key: 'open_form', label: 'Open Form' }];
+        return (
+          <Dropdown
+            menu={{
+              items: menuItems,
+              onClick: ({ key, domEvent }) => {
+                domEvent.stopPropagation();
+                if (key === 'open_form') void openPendingFollowup(record.id);
+              },
+            }}
+            trigger={['click']}
+          >
+            <Button
+              size="small"
+              icon={<EllipsisOutlined />}
+              loading={openingFollowupForCustomerId === record.id}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+          </Dropdown>
+        );
+      },
+    },
     { title: 'Assigned To', dataIndex: 'assignedDtId', key: 'assignedDtId', render: (dtId: string) => { const dt = dietitians.get(dtId); return dt ? <Text>{dt.name}</Text> : <Text type="secondary">Unassigned</Text>; } },
     { title: 'Product', key: 'product', width: 220, render: (_, record) => { const content = record.latestProductName || record.sku || '-'; return <Tooltip title={record.latestProductName || record.sku}><Text type={record.latestProductName ? undefined : 'secondary'} style={{ fontSize: '12px' }}>{content}</Text></Tooltip>; } },
     { title: 'Lifecycle Stage', key: 'lifecycleDisplay', render: (_: unknown, record: Customer) => { const stage = record.currentLifecycleStage; if (!stage) return <Text type="secondary">UNKNOWN</Text>; return <Tag color={getLifecycleColor(stage)}>{stage.replace('_', ' ').toUpperCase()}</Tag>; } },
@@ -130,6 +186,17 @@ export default function AllCustomersPage() {
           </Space>
         )}
       </Drawer>
+      <FollowupModal
+        followupId={selectedFollowupId}
+        visible={followupModalVisible}
+        onClose={() => {
+          setFollowupModalVisible(false);
+          setSelectedFollowupId(null);
+        }}
+        onSuccess={() => {
+          void fetchData();
+        }}
+      />
     </div>
   );
 }

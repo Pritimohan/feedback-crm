@@ -39,6 +39,9 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         leadType: leads.lead_type,
         activityStatus: leads.activity_status,
         currentFollowupNumber: leads.current_followup_number,
+        source: leads.source,
+        purchaseDate: leads.purchase_date,
+        variant: leads.variant,
       })
       .from(leads)
       .where(and(eq(leads.customer_id, customerId), leadMatchesCrmBrand(brand)))
@@ -84,6 +87,9 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         assignedDtId: leadRow?.assignedDtId ?? null,
         currentLifecycleStage: leadRow?.activityStatus ?? 'inactive',
         currentFollowupStage: leadRow?.currentFollowupNumber ?? null,
+        source: leadRow?.source ?? null,
+        purchaseDate: leadRow?.purchaseDate ?? null,
+        variant: leadRow?.variant ?? null,
         ltvScore: String(ltv),
         createdAt: customerRow.createdAt,
       },

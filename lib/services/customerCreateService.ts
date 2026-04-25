@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
-import { customers } from '@/lib/db/schema';
+import { customers, leads } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 import {
   ensureLifecycleForLead,
   resolveOrCreateLeadForCustomer,
@@ -58,7 +59,24 @@ function normalizeIndianPhone(phone: string): string | null {
 
 export function isDuplicatePhoneError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return error.message.includes('duplicate key') || error.message.includes('customers_phone');
+
+  const normalizedMessage = error.message.toLowerCase();
+  if (normalizedMessage.includes('duplicate key') || normalizedMessage.includes('customers_phone')) {
+    return true;
+  }
+
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (!cause || typeof cause !== 'object') return false;
+
+  const postgresCode = (cause as { code?: unknown }).code;
+  const constraintName = (cause as { constraint_name?: unknown }).constraint_name;
+  const detail = (cause as { detail?: unknown }).detail;
+
+  if (postgresCode === '23505' && constraintName === 'customers_phone_unique') {
+    return true;
+  }
+
+  return typeof detail === 'string' && detail.includes('Key (phone)=');
 }
 
 export async function createCustomerWithAutoLeadLifecycle(
@@ -85,10 +103,7 @@ export async function createCustomerWithAutoLeadLifecycle(
         phone: normalizedPhone,
         name,
         email: input.email?.trim().toLowerCase(),
-        source,
         flag_type: input.flag_type?.trim(),
-        purchase_date: input.purchase_date?.trim(),
-        variant: input.variant?.trim(),
         metadata: input.metadata ?? { created_via: 'api_customers_post' },
       })
       .returning();
@@ -105,6 +120,15 @@ export async function createCustomerWithAutoLeadLifecycle(
     if (!created) {
       throw new Error('CONFLICT_ACTIVE_LEAD');
     }
+
+    await tx
+      .update(leads)
+      .set({
+        source,
+        purchase_date: input.purchase_date?.trim(),
+        variant: input.variant?.trim(),
+      })
+      .where(eq(leads.id, newLead.id));
 
     const lcId = await ensureLifecycleForLead(newLead.id, input.anchorDate, tx);
     return { customer: newCustomer, lead: newLead, lifecycleId: lcId };

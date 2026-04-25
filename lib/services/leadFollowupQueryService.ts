@@ -1,6 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { customers, leadLifecycleFollowupAttempts, leadLifecycleFollowups, leadLifecycles, leads } from '@/lib/db/schema';
+import { customers, leadLifecycleFollowupAttempts, leadLifecycleFollowups, leadLifecycles, leads, orders } from '@/lib/db/schema';
 
 export async function getLeadFollowupDetails(followupId: string) {
   const [row] = await db
@@ -24,6 +24,16 @@ export async function getLeadFollowupDetails(followupId: string) {
     .where(eq(leadLifecycleFollowupAttempts.followup_id, followupId))
     .orderBy(desc(leadLifecycleFollowupAttempts.attempt_date));
 
+  const [latestOrder] = await db
+    .select({
+      product_name: orders.product_name,
+      channel: orders.channel,
+    })
+    .from(orders)
+    .where(eq(orders.customer_id, row.customer.id))
+    .orderBy(desc(orders.order_date))
+    .limit(1);
+
   const previousFollowups = await db
     .select()
     .from(leadLifecycleFollowups)
@@ -37,6 +47,7 @@ export async function getLeadFollowupDetails(followupId: string) {
 
   return {
     ...row,
+    latestOrder: latestOrder ?? null,
     attempts,
     previousFollowups,
   };

@@ -25,9 +25,25 @@ export function scheduleInitialFollowup(anchorDate: Date): Date {
   return scheduled;
 }
 
-export function scheduleNextFollowupFromConnected(referenceDate: Date): Date {
+function getFittyNextFollowupOffsetDays(currentFollowupNumber: number): number {
+  if (currentFollowupNumber === 0) return 3;
+  if (currentFollowupNumber === 1) return 2;
+  if (currentFollowupNumber === 2) return 2;
+  return DEFAULT_LEAD_LIFECYCLE_TEMPLATE.nextFollowupOffsetDays;
+}
+
+export function scheduleNextFollowupFromConnected(params: {
+  referenceDate: Date;
+  brand?: string | null;
+  currentFollowupNumber?: number;
+}): Date {
+  const { referenceDate, brand, currentFollowupNumber } = params;
   const scheduled = new Date(referenceDate);
-  scheduled.setDate(scheduled.getDate() + DEFAULT_LEAD_LIFECYCLE_TEMPLATE.nextFollowupOffsetDays);
+  const offsetDays =
+    brand === 'fitty' && typeof currentFollowupNumber === 'number'
+      ? getFittyNextFollowupOffsetDays(currentFollowupNumber)
+      : DEFAULT_LEAD_LIFECYCLE_TEMPLATE.nextFollowupOffsetDays;
+  scheduled.setDate(scheduled.getDate() + offsetDays);
   return scheduled;
 }
 

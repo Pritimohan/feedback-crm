@@ -30,33 +30,39 @@ const MAX_REVIEW_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 
 function renderPreviousInteractionContent(remarks: string | null, payload: unknown): ReactNode {
   const rows: ReactNode[] = [];
-  if (remarks?.trim()) {
+  const payloadObj =
+    payload && typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : undefined;
+
+  const addTextRow = (key: string, label: string, value: unknown) => {
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (!text) return;
     rows.push(
-      <span key="remarks" style={{ marginRight: 8 }}>
+      <span key={key} style={{ marginRight: 8 }}>
         <Text type="secondary" style={{ fontSize: 13 }}>
-          • Remarks:
+          • {label}:
         </Text>
-        <Text style={{ fontSize: 13 }}> {remarks.trim()}</Text>
+        <Text style={{ fontSize: 13 }}> {text}</Text>
+      </span>
+    );
+  };
+
+  addTextRow('remarks', 'Remarks', remarks);
+  addTextRow('review_remark', 'Review Remark', payloadObj?.review_remark);
+  addTextRow('issue_description', 'Issue Description', payloadObj?.issue_description);
+  addTextRow('interested_remark', 'Interested Remark', payloadObj?.interested_remark);
+  addTextRow('dont_reviewed_remark', "Didn't Review Remark", payloadObj?.dont_reviewed_remark);
+
+  const screenshotUrl = typeof payloadObj?.review_screenshot_url === 'string' ? payloadObj.review_screenshot_url.trim() : '';
+  if (screenshotUrl) {
+    rows.push(
+      <span key="review_screenshot_url" style={{ marginRight: 8 }}>
+        <Button type="link" size="small" href={screenshotUrl} target="_blank" rel="noopener noreferrer" style={{ padding: 0 }}>
+          Open Screenshot
+        </Button>
       </span>
     );
   }
-  if (payload && typeof payload === 'object' && payload !== null) {
-    for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
-      if (value === null || value === undefined || value === '') continue;
-      if (typeof value === 'object') continue;
-      const label = key
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (c) => c.toUpperCase());
-      rows.push(
-        <span key={key} style={{ marginRight: 8 }}>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            • {label}:
-          </Text>
-          <Text style={{ fontSize: 13 }}> {String(value)}</Text>
-        </span>
-      );
-    }
-  }
+
   if (!rows.length) return null;
   return <div style={{ lineHeight: 1.6 }}>{rows}</div>;
 }
@@ -103,6 +109,10 @@ interface FollowupDetails {
     phone: string;
     email: string | null;
   };
+  latestOrder: {
+    product_name: string | null;
+    channel: string | null;
+  } | null;
   attempts: AttemptRow[];
   previousFollowups?: PreviousFollowupRow[];
 }
@@ -113,7 +123,6 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   const [details, setDetails] = useState<FollowupDetails | null>(null);
   const [showConnectedForm, setShowConnectedForm] = useState(false);
   const [connectedChoice, setConnectedChoice] = useState<ConnectedChoice | undefined>(undefined);
-  const [remarks, setRemarks] = useState('');
   const [issueDescription, setIssueDescription] = useState('');
   const [reviewRemark, setReviewRemark] = useState('');
   const [reviewScreenshotUrl, setReviewScreenshotUrl] = useState('');
@@ -136,7 +145,6 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         setDetails(json.data);
         setShowConnectedForm(false);
         setConnectedChoice(undefined);
-        setRemarks('');
         setIssueDescription('');
         setReviewRemark('');
         setReviewScreenshotUrl('');
@@ -197,7 +205,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       const res = await fetch(`/api/dt/followups/${followupId}/outcome`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcome, notes: remarks || undefined }),
+        body: JSON.stringify({ outcome }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `Failed to save ${outcome}`);
@@ -249,7 +257,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       const res = await fetch(`/api/dt/followups/${followupId}/connected`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ choice: connectedChoice, payload, notes: remarks || undefined }),
+        body: JSON.stringify({ choice: connectedChoice, payload }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to save connected outcome');
@@ -296,7 +304,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     );
   }
 
-  const { followup, customer, attempts, previousFollowups = [] } = details;
+  const { followup, customer, latestOrder, attempts, previousFollowups = [] } = details;
 
   const getFollowupTitle = (followupNumber: number) => followupUiLabel(followupNumber);
 
@@ -307,13 +315,12 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       ? [
           { label: 'Reviewed', value: 'reviewed' },
           { label: 'Issue with product', value: 'issue_with_product' },
-          { label: "Don't Reviewed", value: 'dont_reviewed' },
+          { label: "Didn't Review", value: 'dont_reviewed' },
         ]
       : [
           { label: 'Reviewed', value: 'reviewed' },
           { label: 'Issue with product', value: 'issue_with_product' },
           { label: 'Interested', value: 'interested' },
-          { label: "Don't Reviewed", value: 'dont_reviewed' },
         ];
 
   const tabItems = [
@@ -345,6 +352,14 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
               <Col span={12}>
                 <Space direction="vertical">
                   <Statistic title="Attempts" value={followup.attempt_count} />
+                  <Text>
+                    <Text type="secondary">Product Name: </Text>
+                    {latestOrder?.product_name?.trim() || '-'}
+                  </Text>
+                  <Text>
+                    <Text type="secondary">Purchase From: </Text>
+                    {latestOrder?.channel?.trim() || '-'}
+                  </Text>
                 </Space>
               </Col>
             </Row>
@@ -522,8 +537,6 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
                   onChange={(e) => setDontReviewedRemark(e.target.value)}
                 />
               ) : null}
-
-              <Input.TextArea placeholder="General Notes (optional)" rows={2} value={remarks} onChange={(e) => setRemarks(e.target.value)} />
 
               <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
                 <Button onClick={onClose}>Cancel</Button>
