@@ -17,7 +17,9 @@ import {
   Tooltip,
   Button,
   Select,
+  Dropdown,
 } from 'antd';
+import type { MenuProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   UserOutlined,
@@ -25,10 +27,9 @@ import {
   MailOutlined,
   DollarOutlined,
   ShoppingOutlined,
-  FormOutlined,
+  EllipsisOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import CallButton from '@/components/dt/CallButton';
 import FollowupModal from '@/components/dt/FollowupModal';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
@@ -220,23 +221,9 @@ export default function CustomersPage() {
       key: 'contact',
       render: (_, record) => (
         <Space direction="vertical" size={0}>
-          <Space>
-            <Text>
-              <PhoneOutlined /> {record.phone}
-            </Text>
-            <CallButton customerPhone={record.phone} customerId={record.id} />
-            <Tooltip title="Open follow-up form">
-              <Button
-                size="small"
-                icon={<FormOutlined />}
-                loading={openingFollowupForCustomerId === record.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void openPendingFollowup(record.id);
-                }}
-              />
-            </Tooltip>
-          </Space>
+          <Text>
+            <PhoneOutlined /> {record.phone}
+          </Text>
           {record.email ? (
             <Text type="secondary" style={{ fontSize: '12px' }}>
               <MailOutlined /> {record.email}
@@ -244,6 +231,42 @@ export default function CustomersPage() {
           ) : null}
         </Space>
       ),
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 80,
+      render: (_, record) => {
+        const menuItems: MenuProps['items'] = [
+          {
+            key: 'open_form',
+            label: 'Open Form',
+          },
+        ];
+
+        return (
+          <Dropdown
+            menu={{
+              items: menuItems,
+              onClick: ({ key, domEvent }) => {
+                domEvent.stopPropagation();
+                if (key === 'open_form') {
+                  void openPendingFollowup(record.id);
+                }
+              },
+            }}
+            trigger={['click']}
+          >
+            <Button
+              size="small"
+              icon={<EllipsisOutlined />}
+              loading={openingFollowupForCustomerId === record.id}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+          </Dropdown>
+        );
+      },
     },
     {
       title: 'Lifecycle Stage',
@@ -418,7 +441,9 @@ export default function CustomersPage() {
 
             <Card title="Interaction History">
               <Timeline
-                items={customerHistory.interactions.map((interaction) => ({
+                items={[...customerHistory.interactions]
+                  .sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf())
+                  .map((interaction) => ({
                   content: (
                     <Space direction="vertical" size={0}>
                       <Text strong>{interaction.outcome === 'connected' ? '✓ Call Connected' : `× ${interaction.outcome}`}</Text>

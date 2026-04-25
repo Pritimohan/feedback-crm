@@ -388,7 +388,11 @@ export async function recordConnectedOutcome(params: {
           lifecycle_id: row.lifecycle.id,
           followup_number: insertedFollowupNumber,
           assigned_dt_id: row.lead.assigned_dt_id ?? dtId,
-          scheduled_date: scheduleNextFollowupFromConnected(now),
+          scheduled_date: scheduleNextFollowupFromConnected({
+            referenceDate: now,
+            brand: row.lead.brand,
+            currentFollowupNumber: row.followup.followup_number,
+          }),
           status: 'pending',
           attempt_count: 0,
           max_attempts: row.followup.max_attempts,

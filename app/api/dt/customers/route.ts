@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { customers, leads, orders } from '@/lib/db/schema';
@@ -21,6 +21,9 @@ export async function GET() {
         leadType: leads.lead_type,
         activityStatus: leads.activity_status,
         currentFollowupNumber: leads.current_followup_number,
+        source: leads.source,
+        purchaseDate: leads.purchase_date,
+        variant: leads.variant,
         updatedAt: leads.updated_at,
       })
       .from(leads)
@@ -71,6 +74,9 @@ export async function GET() {
         leadType: string;
         activityStatus: string;
         currentFollowupNumber: number;
+        source: string | null;
+        purchaseDate: string | null;
+        variant: string | null;
       }
     >();
     for (const row of leadRows) {
@@ -80,6 +86,9 @@ export async function GET() {
           leadType: row.leadType,
           activityStatus: row.activityStatus,
           currentFollowupNumber: row.currentFollowupNumber ?? 0,
+          source: row.source ?? null,
+          purchaseDate: row.purchaseDate ?? null,
+          variant: row.variant ?? null,
         });
       }
     }
@@ -117,6 +126,9 @@ export async function GET() {
         assignedDtId: leadMeta?.assignedDtId ?? null,
         currentLifecycleStage: leadMeta?.activityStatus ?? 'inactive',
         currentFollowupStage: leadMeta?.currentFollowupNumber ?? null,
+        source: leadMeta?.source ?? null,
+        purchaseDate: leadMeta?.purchaseDate ?? null,
+        variant: leadMeta?.variant ?? null,
         ltvScore: orderMeta?.totalAmount ?? '0',
         lastOrderDate: orderMeta?.lastOrderDate,
         createdAt: customer.createdAt,

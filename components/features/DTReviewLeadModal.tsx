@@ -35,7 +35,7 @@ const CONNECTED_LABELS: Record<ConnectedChoice, string> = {
   reviewed: 'Reviewed',
   issue_with_product: 'Issue with product',
   interested: 'Interested',
-  dont_reviewed: "Don't Reviewed",
+  dont_reviewed: "Didn't Review",
 };
 
 export function DTReviewLeadModal({

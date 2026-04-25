@@ -12,6 +12,7 @@ function formatStageBreakdown(byStage?: RescheduledDueTodayByStage | null): stri
     byStage.counselling > 0 ? `${followupStageLabel(0)}: ${byStage.counselling}` : null,
     byStage.fu1 > 0 ? `${followupStageLabel(1)}: ${byStage.fu1}` : null,
     byStage.fu2 > 0 ? `${followupStageLabel(2)}: ${byStage.fu2}` : null,
+    byStage.fu3 > 0 ? `${followupStageLabel(3)}: ${byStage.fu3}` : null,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(' · ') : '';
 }
@@ -137,6 +138,9 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
               {followupStageLabel(2)}
             </th>
             <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
+              {followupStageLabel(3)}
+            </th>
+            <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
               Unreachable%
             </th>
             <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
@@ -176,6 +180,9 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
               </td>
               <td className="px-3 py-2">
                 {d.fu2Conn}/<span style={{ color: 'var(--text3)' }}>{d.fu2Att}</span>
+              </td>
+              <td className="px-3 py-2">
+                {d.fu3Conn}/<span style={{ color: 'var(--text3)' }}>{d.fu3Att}</span>
               </td>
               <td className="px-3 py-2">
                 <BadgePill

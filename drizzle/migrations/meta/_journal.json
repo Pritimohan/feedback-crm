@@ -71,6 +71,13 @@
       "when": 1776339000000,
       "tag": "0009_customers_drop_serial_and_purchase_from",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777117800000,
+      "tag": "0010_move_customer_fields_to_leads",
+      "breakpoints": true
     }
   ]
 }

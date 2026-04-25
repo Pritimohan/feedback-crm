@@ -11,6 +11,11 @@ const ITEMS = [
     product: 'Final cadence — resolution, check-in, or testimonial ask',
     color: '#E7580B',
   },
+  {
+    stage: followupStageLabel(3),
+    product: 'Last attempt — final close-out and wrap-up',
+    color: '#8A2BE2',
+  },
 ];
 
 export function ProductFocusList() {

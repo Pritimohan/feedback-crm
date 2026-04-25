@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { computeRetrySchedule } from '../lib/lifecycle/leadLifecycleSchedule';
+import { computeRetrySchedule, scheduleNextFollowupFromConnected } from '../lib/lifecycle/leadLifecycleSchedule';
 import {
   canChooseInterested,
   computeConnectedTransition,
@@ -17,6 +17,34 @@ function run() {
   const retryNextDayAfterSecondAttempt = computeRetrySchedule({ now, attemptsToday: 2 });
   assert.equal(retryNextDayAfterSecondAttempt.getDate(), new Date('2026-01-02T10:00:00.000Z').getDate());
   assert.equal(retryNextDayAfterSecondAttempt.getHours(), 9);
+
+  const fittyStage0Next = scheduleNextFollowupFromConnected({
+    referenceDate: now,
+    brand: 'fitty',
+    currentFollowupNumber: 0,
+  });
+  assert.equal(fittyStage0Next.getTime(), new Date('2026-01-04T10:00:00.000Z').getTime());
+
+  const fittyStage1Next = scheduleNextFollowupFromConnected({
+    referenceDate: now,
+    brand: 'fitty',
+    currentFollowupNumber: 1,
+  });
+  assert.equal(fittyStage1Next.getTime(), new Date('2026-01-03T10:00:00.000Z').getTime());
+
+  const fittyStage2Next = scheduleNextFollowupFromConnected({
+    referenceDate: now,
+    brand: 'fitty',
+    currentFollowupNumber: 2,
+  });
+  assert.equal(fittyStage2Next.getTime(), new Date('2026-01-03T10:00:00.000Z').getTime());
+
+  const nonFittyNext = scheduleNextFollowupFromConnected({
+    referenceDate: now,
+    brand: 'fitelo',
+    currentFollowupNumber: 0,
+  });
+  assert.equal(nonFittyNext.getTime(), new Date('2026-01-02T10:00:00.000Z').getTime());
 
   const busyTerminal = computeNonConnectedTransition({
     outcome: 'busy',

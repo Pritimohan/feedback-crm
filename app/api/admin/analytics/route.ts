@@ -323,10 +323,11 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const [counselling, firstFollowup, secondFollowup] = await Promise.all([
+    const [counselling, firstFollowup, secondFollowup, thirdFollowup] = await Promise.all([
       getFollowupAnalytics(0),
       getFollowupAnalytics(1),
       getFollowupAnalytics(2),
+      getFollowupAnalytics(3),
     ]);
 
     const activityWhere = and(
@@ -404,6 +405,7 @@ export async function GET(request: NextRequest) {
       counselling,
       firstFollowup,
       secondFollowup,
+      thirdFollowup,
       activity,
       dateRange: {
         startDate: startDate.toISOString().split('T')[0],
