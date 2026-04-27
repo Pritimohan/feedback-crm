@@ -26,6 +26,7 @@ export async function getLeadFollowupDetails(followupId: string) {
 
   const [latestOrder] = await db
     .select({
+      shopify_order_id: orders.shopify_order_id,
       product_name: orders.product_name,
       channel: orders.channel,
     })
