@@ -18,6 +18,9 @@ export async function GET() {
       activityStatus: leads.activity_status,
       currentFollowupNumber: leads.current_followup_number,
       leadType: leads.lead_type,
+      source: leads.source,
+      purchaseDate: leads.purchase_date,
+      variant: leads.variant,
       updatedAt: leads.updated_at,
     })
     .from(leads)
