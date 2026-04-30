@@ -239,11 +239,13 @@ export async function ensureLifecycleForExistingCustomerByPhone(
 
     const lifecycleAlreadyActive = await hasActiveLifecycle(lead.id, tx);
     const lifecycleId = await ensureLifecycleForLead(lead.id, input.anchorDate, tx);
+    const lifecycleAction: EnsureCustomerLifecycleResult['lifecycle_action'] =
+      lifecycleAlreadyActive ? 'already_active' : 'created';
     return {
       customer: existingCustomer,
       lead,
       lifecycleId,
-      lifecycleAction: lifecycleAlreadyActive ? 'already_active' : 'created',
+      lifecycleAction,
     };
   });
 
