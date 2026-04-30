@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test:lifecycle": "tsx scripts/test-lead-lifecycle-rules.ts",
+    "test:duplicate-lifecycle": "tsx scripts/test-duplicate-customer-lifecycle-flow.ts",
     "seed:test": "tsx scripts/seed-test-data.ts",
     "user:create": "tsx scripts/create-user.ts"
   },

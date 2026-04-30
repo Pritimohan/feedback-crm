@@ -1,15 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  createCustomerWithAutoLeadLifecycle,
-  isDuplicatePhoneError,
+  createOrEnsureCustomerLifecycle,
   type CreateCustomerInput,
 } from '@/lib/services/customerCreateService';
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CreateCustomerInput;
-    const data = await createCustomerWithAutoLeadLifecycle(body, 'fitty');
-    return NextResponse.json({ data }, { status: 201 });
+    const result = await createOrEnsureCustomerLifecycle(body, 'fitty');
+    if (result.status === 'created') {
+      return NextResponse.json({ data: result.data }, { status: 201 });
+    }
+
+    return NextResponse.json(
+      {
+        data: result.data,
+        status:
+          result.data.lifecycle_action === 'created'
+            ? 'existing_customer_lifecycle_updated'
+            : 'existing_customer_already_active',
+      },
+      { status: 200 }
+    );
   } catch (error) {
     if (error instanceof Error && error.message === 'VALIDATION_PHONE_NAME_REQUIRED') {
       return NextResponse.json({ error: 'phone and name are required' }, { status: 400 });
@@ -22,9 +34,6 @@ export async function POST(request: NextRequest) {
         { error: 'An active lead of this type already exists for this customer' },
         { status: 409 }
       );
-    }
-    if (isDuplicatePhoneError(error)) {
-      return NextResponse.json({ error: 'Customer with this phone already exists' }, { status: 409 });
     }
     console.error('Create dietplan customer error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
