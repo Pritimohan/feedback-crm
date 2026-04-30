@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { computeRetrySchedule, scheduleNextFollowupFromConnected } from '../lib/lifecycle/leadLifecycleSchedule';
+import {
+  computeRetrySchedule,
+  scheduleInitialFollowup,
+  scheduleNextFollowupFromConnected,
+} from '../lib/lifecycle/leadLifecycleSchedule';
 import {
   canChooseInterested,
   computeConnectedTransition,
@@ -17,6 +21,27 @@ function run() {
   const retryNextDayAfterSecondAttempt = computeRetrySchedule({ now, attemptsToday: 2 });
   assert.equal(retryNextDayAfterSecondAttempt.getDate(), new Date('2026-01-02T10:00:00.000Z').getDate());
   assert.equal(retryNextDayAfterSecondAttempt.getHours(), 9);
+
+  const beforeCutoffInitialFollowup = scheduleInitialFollowup(new Date(2026, 0, 1, 18, 59, 0, 0));
+  assert.equal(beforeCutoffInitialFollowup.getFullYear(), 2026);
+  assert.equal(beforeCutoffInitialFollowup.getMonth(), 0);
+  assert.equal(beforeCutoffInitialFollowup.getDate(), 1);
+  assert.equal(beforeCutoffInitialFollowup.getHours(), 18);
+  assert.equal(beforeCutoffInitialFollowup.getMinutes(), 59);
+
+  const atCutoffInitialFollowup = scheduleInitialFollowup(new Date(2026, 0, 1, 19, 0, 0, 0));
+  assert.equal(atCutoffInitialFollowup.getFullYear(), 2026);
+  assert.equal(atCutoffInitialFollowup.getMonth(), 0);
+  assert.equal(atCutoffInitialFollowup.getDate(), 2);
+  assert.equal(atCutoffInitialFollowup.getHours(), 9);
+  assert.equal(atCutoffInitialFollowup.getMinutes(), 0);
+
+  const afterCutoffInitialFollowup = scheduleInitialFollowup(new Date(2026, 0, 1, 20, 30, 0, 0));
+  assert.equal(afterCutoffInitialFollowup.getFullYear(), 2026);
+  assert.equal(afterCutoffInitialFollowup.getMonth(), 0);
+  assert.equal(afterCutoffInitialFollowup.getDate(), 2);
+  assert.equal(afterCutoffInitialFollowup.getHours(), 9);
+  assert.equal(afterCutoffInitialFollowup.getMinutes(), 0);
 
   const fittyStage0Next = scheduleNextFollowupFromConnected({
     referenceDate: now,
@@ -71,9 +96,10 @@ function run() {
 
   assert.equal(canChooseInterested(0), true);
   assert.equal(canChooseInterested(1), true);
-  assert.equal(canChooseInterested(2), false);
+  assert.equal(canChooseInterested(2), true);
+  assert.equal(canChooseInterested(3), false);
 
-  const choicesFinalStage = getConnectedChoicesForStage(2);
+  const choicesFinalStage = getConnectedChoicesForStage(3);
   assert.ok(!choicesFinalStage.includes('interested'));
 
   const interestedTransition = computeConnectedTransition('interested');

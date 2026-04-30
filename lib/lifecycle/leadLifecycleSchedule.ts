@@ -1,4 +1,10 @@
-import { MAX_ATTEMPTS_PER_DAY, NEXT_DAY_RETRY_HOUR, RETRY_AFTER_HOURS, REVIEW_MAX_ATTEMPTS } from '@/lib/utils/lifecycleConstants';
+import {
+  INITIAL_FOLLOWUP_CUTOFF_HOUR,
+  MAX_ATTEMPTS_PER_DAY,
+  NEXT_DAY_RETRY_HOUR,
+  RETRY_AFTER_HOURS,
+  REVIEW_MAX_ATTEMPTS,
+} from '@/lib/utils/lifecycleConstants';
 
 export interface LifecycleTemplate {
   key: string;
@@ -22,6 +28,10 @@ export const DEFAULT_LEAD_LIFECYCLE_TEMPLATE: LifecycleTemplate = {
 export function scheduleInitialFollowup(anchorDate: Date): Date {
   const scheduled = new Date(anchorDate);
   scheduled.setDate(scheduled.getDate() + DEFAULT_LEAD_LIFECYCLE_TEMPLATE.firstFollowupOffsetDays);
+  if (scheduled.getHours() >= INITIAL_FOLLOWUP_CUTOFF_HOUR) {
+    scheduled.setDate(scheduled.getDate() + 1);
+    scheduled.setHours(NEXT_DAY_RETRY_HOUR, 0, 0, 0);
+  }
   return scheduled;
 }
 

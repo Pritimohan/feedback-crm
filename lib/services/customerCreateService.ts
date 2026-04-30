@@ -1,9 +1,10 @@
-import { db } from '@/lib/db';
-import { customers, leads } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { db, type FeedbackDbTransaction } from '@/lib/db';
+import { customers, leadLifecycles, leads } from '@/lib/db/schema';
+import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import {
   ensureLifecycleForLead,
   resolveOrCreateLeadForCustomer,
+  resolveAssignedDt,
 } from '@/lib/services/externalImportService';
 import { refreshCustomerSummary } from '@/lib/services/customerSummaryService';
 
@@ -28,6 +29,18 @@ export interface CreateCustomerResult {
   lifecycle_id: string;
   assigned_dt_id: string | null;
 }
+
+export interface EnsureCustomerLifecycleResult {
+  customer: typeof customers.$inferSelect;
+  lead_id: string;
+  lifecycle_id: string;
+  assigned_dt_id: string | null;
+  lifecycle_action: 'created' | 'already_active';
+}
+
+export type CreateOrEnsureCustomerLifecycleResult =
+  | { status: 'created'; data: CreateCustomerResult }
+  | { status: 'existing'; data: EnsureCustomerLifecycleResult };
 
 function normalizeIndianPhone(phone: string): string | null {
   const trimmed = phone.trim();
@@ -55,6 +68,43 @@ function normalizeIndianPhone(phone: string): string | null {
   }
 
   return null;
+}
+
+function matchesBrandFilter(brand: 'fitty' | 'fitelo') {
+  if (brand === 'fitelo') {
+    return eq(leads.brand, 'fitelo');
+  }
+  return or(eq(leads.brand, 'fitty'), isNull(leads.brand));
+}
+
+async function findBrandActiveLead(
+  customerId: string,
+  forcedBrand: 'fitty' | 'fitelo',
+  tx: FeedbackDbTransaction
+) {
+  const [lead] = await tx
+    .select()
+    .from(leads)
+    .where(
+      and(
+        eq(leads.customer_id, customerId),
+        eq(leads.lead_type, 'review'),
+        eq(leads.activity_status, 'active'),
+        matchesBrandFilter(forcedBrand)
+      )
+    )
+    .orderBy(desc(leads.updated_at))
+    .limit(1);
+  return lead ?? null;
+}
+
+async function hasActiveLifecycle(leadId: string, tx: FeedbackDbTransaction): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: leadLifecycles.id })
+    .from(leadLifecycles)
+    .where(and(eq(leadLifecycles.lead_id, leadId), eq(leadLifecycles.status, 'active')))
+    .limit(1);
+  return Boolean(row);
 }
 
 export function isDuplicatePhoneError(error: unknown): boolean {
@@ -142,4 +192,84 @@ export async function createCustomerWithAutoLeadLifecycle(
     lifecycle_id: lifecycleId,
     assigned_dt_id: lead.assigned_dt_id,
   };
+}
+
+export async function ensureLifecycleForExistingCustomerByPhone(
+  input: CreateCustomerInput,
+  forcedBrand: 'fitty' | 'fitelo'
+): Promise<EnsureCustomerLifecycleResult> {
+  const normalizedPhone = input.phone ? normalizeIndianPhone(input.phone) : null;
+  const name = input.name?.trim();
+  if (!input.phone || !name) {
+    throw new Error('VALIDATION_PHONE_NAME_REQUIRED');
+  }
+  if (!normalizedPhone) {
+    throw new Error('VALIDATION_PHONE_INVALID');
+  }
+
+  const result = await db.transaction(async (tx) => {
+    const [existingCustomer] = await tx
+      .select()
+      .from(customers)
+      .where(eq(customers.phone, normalizedPhone))
+      .limit(1);
+    if (!existingCustomer) {
+      throw new Error('CUSTOMER_NOT_FOUND_BY_PHONE');
+    }
+
+    let lead = await findBrandActiveLead(existingCustomer.id, forcedBrand, tx);
+    if (!lead) {
+      const assignedDtId = await resolveAssignedDt(input.assignedDtId ?? null, tx);
+      const [newLead] = await tx
+        .insert(leads)
+        .values({
+          customer_id: existingCustomer.id,
+          lead_type: 'review',
+          activity_status: 'active',
+          assigned_dt_id: assignedDtId,
+          brand: forcedBrand,
+          source: input.source?.trim() || 'api_manual',
+          purchase_date: input.purchase_date?.trim(),
+          variant: input.variant?.trim(),
+          remarks: input.remarks,
+        })
+        .returning();
+      lead = newLead;
+    }
+
+    const lifecycleAlreadyActive = await hasActiveLifecycle(lead.id, tx);
+    const lifecycleId = await ensureLifecycleForLead(lead.id, input.anchorDate, tx);
+    return {
+      customer: existingCustomer,
+      lead,
+      lifecycleId,
+      lifecycleAction: lifecycleAlreadyActive ? 'already_active' : 'created',
+    };
+  });
+
+  await refreshCustomerSummary(result.customer.id);
+
+  return {
+    customer: result.customer,
+    lead_id: result.lead.id,
+    lifecycle_id: result.lifecycleId,
+    assigned_dt_id: result.lead.assigned_dt_id,
+    lifecycle_action: result.lifecycleAction,
+  };
+}
+
+export async function createOrEnsureCustomerLifecycle(
+  input: CreateCustomerInput,
+  forcedBrand: 'fitty' | 'fitelo'
+): Promise<CreateOrEnsureCustomerLifecycleResult> {
+  try {
+    const created = await createCustomerWithAutoLeadLifecycle(input, forcedBrand);
+    return { status: 'created', data: created };
+  } catch (error) {
+    if (!isDuplicatePhoneError(error)) {
+      throw error;
+    }
+    const existing = await ensureLifecycleForExistingCustomerByPhone(input, forcedBrand);
+    return { status: 'existing', data: existing };
+  }
 }
