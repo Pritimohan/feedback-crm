@@ -72,7 +72,7 @@ export default function AllCustomersPage() {
       if (!customersResponse.ok) throw new Error('Failed to fetch customers');
       const customersData = await customersResponse.json();
       const dtsResponse = await fetch('/api/admin/dietitians');
-      if (!dtsResponse.ok) throw new Error('Failed to fetch dietitians');
+      if (!dtsResponse.ok) throw new Error('Failed to fetch agents');
       const dtsData = await dtsResponse.json();
       const dtMap = new Map<string, DT>(); dtsData.forEach((dt: DT) => { dtMap.set(dt.id, dt); });
       const nextCustomers = customersData.customers || [];
@@ -166,11 +166,11 @@ export default function AllCustomersPage() {
   return (
     <div>
       <Title level={2}>All Customers</Title>
-      <Paragraph type="secondary">View and manage all customers across all dietitians</Paragraph>
+      <Paragraph type="secondary">View and manage all customers across all agents</Paragraph>
       <Space wrap style={{ marginBottom: 16 }}>
         <Search placeholder="Search by name, phone, or email" onSearch={(v) => { setSearchText(v); applyFilters(v, selectedDietitianId, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} onChange={(e) => { const v = e.target.value; setSearchText(v); applyFilters(v, selectedDietitianId, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} style={{ width: 300 }} allowClear />
         <Select placeholder="Filter by Lead Type" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedLeadType(next); setSelectedLifecycleStage(null); applyFilters(searchText, selectedDietitianId, null, selectedFollowupStage, next); }} value={selectedLeadType} options={[{ label: 'Review', value: 'review' }, { label: 'NPS', value: 'nps' }]} />
-        <Select placeholder="Filter by Dietitian" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedDietitianId(next); applyFilters(searchText, next, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} value={selectedDietitianId} options={[...Array.from(dietitians.values()).map((dt) => ({ label: dt.name, value: dt.id }))]} />
+        <Select placeholder="Filter by Agent" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedDietitianId(next); applyFilters(searchText, next, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} value={selectedDietitianId} options={[...Array.from(dietitians.values()).map((dt) => ({ label: dt.name, value: dt.id }))]} />
         <Select placeholder="Filter by Lifecycle Stage" allowClear style={{ width: 180 }} onChange={(v) => { const next = v ?? null; setSelectedLifecycleStage(next); applyFilters(searchText, selectedDietitianId, next, selectedFollowupStage, selectedLeadType); }} value={selectedLifecycleStage} options={LIFECYCLE_FILTER_OPTIONS} />
         <Select placeholder="Filter by follow-up stage" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedFollowupStage(next); applyFilters(searchText, selectedDietitianId, selectedLifecycleStage, next, selectedLeadType); }} value={selectedFollowupStage} options={FOLLOWUP_STAGE_OPTIONS} />
       </Space>

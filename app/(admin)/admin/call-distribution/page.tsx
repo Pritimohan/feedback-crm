@@ -112,7 +112,7 @@ export default function CallDistributionPage() {
   useEffect(() => { void fetchDistribution(); }, [fetchDistribution]);
 
   const columns: ColumnsType<DTDistribution> = [
-    { title: 'Dietitian', key: 'dietitian', render: (_, record) => <Space><Badge status={record.todaysCalls > 0 ? 'processing' : 'default'} /><div><Text strong>{record.dtName}</Text><br /><Text type="secondary" style={{ fontSize: 12 }}>{record.dtEmail}</Text></div></Space> },
+    { title: 'Agent', key: 'dietitian', render: (_, record) => <Space><Badge status={record.todaysCalls > 0 ? 'processing' : 'default'} /><div><Text strong>{record.dtName}</Text><br /><Text type="secondary" style={{ fontSize: 12 }}>{record.dtEmail}</Text></div></Space> },
     { title: "Today's Due", dataIndex: 'todaysDue', key: 'todaysDue', align: 'center', render: (count: number) => <Text strong style={{ fontSize: 16, color: count > 0 ? '#134175' : '#99998f' }}>{count}</Text> },
     { title: 'Overdue', dataIndex: 'overdue', key: 'overdue', align: 'center', render: (count: number) => <Text strong style={{ fontSize: 16, color: count > 0 ? '#e7580b' : '#99998f' }}>{count}</Text> },
     { title: 'Total', dataIndex: 'todaysCalls', key: 'todaysCalls', align: 'center', render: (count: number) => <Text strong style={{ fontSize: 16, color: count > 0 ? '#134175' : '#99998f' }}>{count}</Text> },
@@ -132,11 +132,11 @@ export default function CallDistributionPage() {
         <Col xs={24} sm={12} md={6}><Card><Statistic title="Today's Due" value={stats?.totalTodaysDue || 0} prefix={<CalendarOutlined />} valueStyle={{ color: '#1890ff' }} /></Card></Col>
         <Col xs={24} sm={12} md={6}><Card><Statistic title="Overdue" value={stats?.totalOverdue || 0} prefix={<WarningOutlined />} valueStyle={{ color: (stats?.totalOverdue || 0) > 0 ? '#e7580b' : '#99998f' }} /></Card></Col>
         <Col xs={24} sm={12} md={6}><Card><Statistic title="Total Pending" value={stats?.totalTodaysCalls || 0} prefix={<PhoneOutlined />} valueStyle={{ color: '#722ed1' }} /></Card></Col>
-        <Col xs={24} sm={12} md={6}><Card><Statistic title="Active Dietitians" value={stats?.totalActiveDTs || 0} prefix={<TeamOutlined />} /></Card></Col>
+        <Col xs={24} sm={12} md={6}><Card><Statistic title="Active Agents" value={stats?.totalActiveDTs || 0} prefix={<TeamOutlined />} /></Card></Col>
       </Row>
-      {stats && (stats.isBalanced ? <Alert message="Call Distribution is Balanced" description={`Today&apos;s calls are evenly distributed with a maximum deviation of ${stats.deviation} calls between dietitians.`} type="success" showIcon icon={<CheckCircleOutlined />} /> : <Alert message="Uneven Call Distribution Detected" description={`There is a deviation of ${stats.deviation} calls (Max: ${stats.maxCalls}, Min: ${stats.minCalls}). Consider rebalancing for fair distribution.`} type="warning" showIcon icon={<WarningOutlined />} />)}
-      <Card title={<Space><PhoneOutlined /><span>Today&apos;s Calls by Dietitian</span></Space>}><Table columns={columns} dataSource={distribution} rowKey="dtId" pagination={false} loading={loading} /></Card>
-      <Card size="small" style={{ background: '#eeeae3' }}><Space direction="vertical" size="small"><Text strong>How Today&apos;s Call Distribution Works:</Text><Text type="secondary">• Shows pending followup calls scheduled for today (or overdue)</Text><Text type="secondary">• Rebalancing only redistributes today&apos;s pending calls, not all customers</Text><Text type="secondary">• Only active dietitians receive calls and appear in this distribution</Text></Space></Card>
+      {stats && (stats.isBalanced ? <Alert message="Call Distribution is Balanced" description={`Today&apos;s calls are evenly distributed with a maximum deviation of ${stats.deviation} calls between agents.`} type="success" showIcon icon={<CheckCircleOutlined />} /> : <Alert message="Uneven Call Distribution Detected" description={`There is a deviation of ${stats.deviation} calls (Max: ${stats.maxCalls}, Min: ${stats.minCalls}). Consider rebalancing for fair distribution.`} type="warning" showIcon icon={<WarningOutlined />} />)}
+      <Card title={<Space><PhoneOutlined /><span>Today&apos;s Calls by Agent</span></Space>}><Table columns={columns} dataSource={distribution} rowKey="dtId" pagination={false} loading={loading} /></Card>
+      <Card size="small" style={{ background: '#eeeae3' }}><Space direction="vertical" size="small"><Text strong>How Today&apos;s Call Distribution Works:</Text><Text type="secondary">• Shows pending followup calls scheduled for today (or overdue)</Text><Text type="secondary">• Rebalancing only redistributes today&apos;s pending calls, not all customers</Text><Text type="secondary">• Only active agents receive calls and appear in this distribution</Text></Space></Card>
     </Space>
   );
 }

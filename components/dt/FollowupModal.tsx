@@ -102,6 +102,10 @@ interface FollowupDetails {
   lead: {
     id: string;
     lead_type: 'nps' | 'review';
+    brand: 'fitty' | 'fitelo' | null;
+    source: string | null;
+    variant: string | null;
+    purchase_date: string | null;
   };
   customer: {
     id: string;
@@ -115,6 +119,32 @@ interface FollowupDetails {
   } | null;
   attempts: AttemptRow[];
   previousFollowups?: PreviousFollowupRow[];
+}
+
+function formatPurchaseDateForDisplay(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const parsed = dayjs(trimmed);
+  return parsed.isValid() ? parsed.format('MMM D, YYYY') : trimmed;
+}
+
+function formatLeadProductDisplay(
+  lead: FollowupDetails['lead'],
+  latestOrder: FollowupDetails['latestOrder']
+): string {
+  const base =
+    lead.brand === 'fitty'
+      ? 'GLP'
+      : lead.brand === 'fitelo'
+        ? 'smart scale'
+        : latestOrder?.product_name?.trim() || '';
+
+  const parts: string[] = [];
+  if (base) parts.push(base);
+  const variant = lead.variant?.trim();
+  if (variant) parts.push(variant);
+
+  return parts.length > 0 ? parts.join(' · ') : '-';
 }
 
 export default function FollowupModal({ followupId, visible, onClose, onSuccess }: Props) {
@@ -304,7 +334,13 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     );
   }
 
-  const { followup, customer, latestOrder, attempts, previousFollowups = [] } = details;
+  const { followup, customer, lead, latestOrder, attempts, previousFollowups = [] } = details;
+
+  const purchaseDateDisplay = (() => {
+    const raw = lead.purchase_date?.trim();
+    if (!raw) return '-';
+    return formatPurchaseDateForDisplay(raw) || '-';
+  })();
 
   const getFollowupTitle = (followupNumber: number) => followupUiLabel(followupNumber);
 
@@ -354,11 +390,15 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
                   <Statistic title="Attempts" value={followup.attempt_count} />
                   <Text>
                     <Text type="secondary">Product Name: </Text>
-                    {latestOrder?.product_name?.trim() || '-'}
+                    {formatLeadProductDisplay(lead, latestOrder)}
                   </Text>
                   <Text>
                     <Text type="secondary">Purchase From: </Text>
-                    {latestOrder?.channel?.trim() || '-'}
+                    {lead.source?.trim() || '-'}
+                  </Text>
+                  <Text>
+                    <Text type="secondary">Purchase date: </Text>
+                    {purchaseDateDisplay}
                   </Text>
                 </Space>
               </Col>

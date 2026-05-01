@@ -91,9 +91,9 @@ export default function AnalyticsPage() {
       ]);
 
       if (!analyticsRes.ok) throw new Error('Failed to fetch analytics');
-      if (!dietitianRes.ok) throw new Error('Failed to fetch dietitian analytics');
+      if (!dietitianRes.ok) throw new Error('Failed to fetch agent analytics');
       if (!transactionsRes.ok) throw new Error('Failed to fetch transactions');
-      if (!dtWorkloadRes.ok) throw new Error('Failed to fetch dietitian workload');
+      if (!dtWorkloadRes.ok) throw new Error('Failed to fetch agent workload');
 
       const [analyticsJson, dietitianJson, transactionsJson, dtWorkloadJson] = await Promise.all([
         analyticsRes.json(),
@@ -459,7 +459,7 @@ export default function AnalyticsPage() {
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'funnel', label: 'Funnel Overview' },
     { key: 'followup', label: 'Follow-up Stages' },
-    { key: 'dietitian', label: 'Dietitian Performance' },
+    { key: 'dietitian', label: 'Agent Performance' },
     { key: 'pipeline', label: 'Pipeline & Alerts' },
   ];
 
@@ -609,7 +609,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="analytics-grid-2">
             <div className="analytics-card">
-              <div className="analytics-card-title">Connected customers by dietitian</div>
+              <div className="analytics-card-title">Connected customers by agent</div>
               <ConnectedByDietitianChart
                 dietitians={dietitianData}
                 selectedDtId={selectedDietitian?.dtId ?? null}

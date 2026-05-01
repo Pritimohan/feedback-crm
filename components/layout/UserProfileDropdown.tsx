@@ -8,7 +8,7 @@ import './UserProfileDropdown.css';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
-  dt: 'Dietitian',
+  dt: 'Agent',
 };
 
 const ROLE_BADGE_STYLES: Record<string, { bg: string; color: string }> = {

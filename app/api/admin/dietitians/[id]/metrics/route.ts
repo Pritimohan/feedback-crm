@@ -13,7 +13,7 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
   const brand = await getCrmBrandFromCookie();
 
   const [user] = await db.select({ id: users.id }).from(users).where(and(eq(users.id, id), eq(users.role, 'dt')));
-  if (!user) return NextResponse.json({ error: 'Dietitian not found' }, { status: 404 });
+  if (!user) return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
 
   const [leadAgg, orderAgg, taskAgg] = await Promise.all([
     db

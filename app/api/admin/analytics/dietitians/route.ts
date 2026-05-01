@@ -219,7 +219,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching dietitian analytics:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch dietitian analytics' },
+      { error: 'Failed to fetch agent analytics' },
       { status: 500 }
     );
   }
