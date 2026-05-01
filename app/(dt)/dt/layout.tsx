@@ -100,7 +100,7 @@ export default function DTLayout({ children }: { children: React.ReactNode }) {
           }}
         >
           <Text strong style={{ color: "#1d4838", fontSize: 15 }}>
-            Dietitian Dashboard
+            Agent Dashboard
           </Text>
           <UserProfileDropdown user={user} menuItems={userMenuItems} />
         </Header>

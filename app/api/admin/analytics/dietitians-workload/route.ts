@@ -377,7 +377,7 @@ export async function GET(request: NextRequest) {
         ? { message: error.message, stack: error.stack }
         : undefined;
     return NextResponse.json(
-      { error: 'Failed to fetch dietitian workload', ...(details ? { details } : {}) },
+      { error: 'Failed to fetch agent workload', ...(details ? { details } : {}) },
       { status: 500 }
     );
   }

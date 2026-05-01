@@ -25,7 +25,7 @@ export function TransactionTable({ transactions }: { transactions: TransactionRo
               Customer
             </th>
             <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
-              Dietitian
+              Agent
             </th>
             <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
               Stage

@@ -61,7 +61,7 @@ export default function UsersPage() {
         body: JSON.stringify(values),
       });
       if (!response.ok) throw new Error((await response.json()).error || 'Failed to add user');
-      message.success(`${values.role === 'admin' ? 'Admin' : 'Dietitian'} added successfully`);
+      message.success(`${values.role === 'admin' ? 'Admin' : 'Agent'} added successfully`);
       setIsAddModalOpen(false);
       form.resetFields();
       void fetchUsers();
@@ -108,7 +108,7 @@ export default function UsersPage() {
       width: '12%',
       render: (role: string) => (
         <Tag color={role === 'admin' ? '#1d4838' : '#134175'} icon={role === 'admin' ? <CrownOutlined /> : <TeamOutlined />}>
-          {role === 'admin' ? 'Admin' : 'Dietitian'}
+          {role === 'admin' ? 'Admin' : 'Agent'}
         </Tag>
       ),
     },
@@ -175,7 +175,7 @@ export default function UsersPage() {
           items={[
             { key: 'all', label: `All Users (${allUsers.length})` },
             { key: 'admin', label: <span><CrownOutlined style={{ marginRight: 4 }} />Admins ({adminCount})</span> },
-            { key: 'dt', label: <span><TeamOutlined style={{ marginRight: 4 }} />Dietitians ({dtCount})</span> },
+            { key: 'dt', label: <span><TeamOutlined style={{ marginRight: 4 }} />Agents ({dtCount})</span> },
           ]}
         />
         {loading ? (
@@ -191,7 +191,7 @@ export default function UsersPage() {
           <Form.Item name="email" label="Email Address" rules={[{ required: true, message: 'Please enter the email' }, { type: 'email', message: 'Please enter a valid email' }]}><Input placeholder="Enter email address" /></Form.Item>
           <Form.Item name="password" label="Password" rules={[{ required: true, message: 'Please enter a password' }, { min: 6, message: 'Password must be at least 6 characters' }]}><Input.Password placeholder="Enter password" /></Form.Item>
           <Form.Item name="role" label="Role" rules={[{ required: true, message: 'Please select a role' }]}>
-            <Select options={[{ value: 'admin', label: <><CrownOutlined /> Admin</> }, { value: 'dt', label: <><TeamOutlined /> Dietitian</> }]} />
+            <Select options={[{ value: 'admin', label: <><CrownOutlined /> Admin</> }, { value: 'dt', label: <><TeamOutlined /> Agent</> }]} />
           </Form.Item>
           <Form.Item name="active_status" label="Active Status" valuePropName="checked"><Switch checkedChildren="Active" unCheckedChildren="Inactive" /></Form.Item>
           <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
@@ -208,7 +208,7 @@ export default function UsersPage() {
           <Card size="small">
             <Space direction="vertical" style={{ width: '100%' }}>
               <div><strong>Email:</strong> {selectedUser.email}</div>
-              <div><strong>Role:</strong> <Tag color={selectedUser.role === 'admin' ? '#1d4838' : '#134175'}>{selectedUser.role === 'admin' ? 'Admin' : 'Dietitian'}</Tag></div>
+              <div><strong>Role:</strong> <Tag color={selectedUser.role === 'admin' ? '#1d4838' : '#134175'}>{selectedUser.role === 'admin' ? 'Admin' : 'Agent'}</Tag></div>
               <div><strong>Status:</strong> <Tag color={selectedUser.active_status ? '#1d4838' : '#e7580b'}>{selectedUser.active_status ? 'Active' : 'Inactive'}</Tag></div>
               <Row gutter={16}>
                 <Col span={12}><Statistic title="Joined" value={new Date(selectedUser.created_at).toLocaleDateString('en-IN')} /></Col>

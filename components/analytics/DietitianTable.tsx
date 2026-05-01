@@ -78,7 +78,7 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
         <thead>
           <tr style={{ background: 'var(--fg)' }}>
             <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
-              Dietitian
+              Agent
             </th>
             <th
               className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
@@ -94,7 +94,7 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
             </th>
             <th
               className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
-              title="Number of overdue leads this DT attempted to call on the selected date"
+              title="Number of overdue leads this agent attempted to call on the selected date"
             >
               Overdue Attempted
             </th>
