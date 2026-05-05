@@ -22,6 +22,17 @@ function run() {
   assert.equal(retryNextDayAfterSecondAttempt.getDate(), new Date('2026-01-02T10:00:00.000Z').getDate());
   assert.equal(retryNextDayAfterSecondAttempt.getHours(), 9);
 
+  const fiteloRetryAfterSecondAttemptSameDay = computeRetrySchedule({
+    now,
+    attemptsToday: 2,
+    brand: 'fitelo',
+  });
+  assert.equal(
+    fiteloRetryAfterSecondAttemptSameDay.getDate(),
+    new Date('2026-01-03T10:00:00.000Z').getDate()
+  );
+  assert.equal(fiteloRetryAfterSecondAttemptSameDay.getHours(), 9);
+
   const beforeCutoffInitialFollowup = scheduleInitialFollowup(new Date(2026, 0, 1, 18, 59, 0, 0));
   assert.equal(beforeCutoffInitialFollowup.getFullYear(), 2026);
   assert.equal(beforeCutoffInitialFollowup.getMonth(), 0);

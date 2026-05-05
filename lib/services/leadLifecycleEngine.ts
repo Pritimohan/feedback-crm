@@ -229,6 +229,7 @@ export async function recordFollowupAttemptOutcome(params: {
       followupUpdates.scheduled_date = computeRetrySchedule({
         now,
         attemptsToday: Number(count),
+        brand: row.lead.brand,
       });
       followupUpdates.status = 'pending';
     }
