@@ -1,4 +1,5 @@
 import {
+  FITTELO_RETRY_DAYS_AFTER_DAILY_CAP,
   INITIAL_FOLLOWUP_CUTOFF_HOUR,
   MAX_ATTEMPTS_PER_DAY,
   NEXT_DAY_RETRY_HOUR,
@@ -57,12 +58,17 @@ export function scheduleNextFollowupFromConnected(params: {
   return scheduled;
 }
 
-export function computeRetrySchedule(params: { now: Date; attemptsToday: number }): Date {
-  const { now, attemptsToday } = params;
+export function computeRetrySchedule(params: {
+  now: Date;
+  attemptsToday: number;
+  brand?: string | null;
+}): Date {
+  const { now, attemptsToday, brand } = params;
 
   if (attemptsToday >= MAX_ATTEMPTS_PER_DAY) {
     const nextDay = new Date(now);
-    nextDay.setDate(nextDay.getDate() + 1);
+    const dayOffset = brand === 'fitelo' ? FITTELO_RETRY_DAYS_AFTER_DAILY_CAP : 1;
+    nextDay.setDate(nextDay.getDate() + dayOffset);
     nextDay.setHours(NEXT_DAY_RETRY_HOUR, 0, 0, 0);
     return nextDay;
   }
