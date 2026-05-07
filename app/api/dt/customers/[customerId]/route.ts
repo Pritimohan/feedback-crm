@@ -3,7 +3,7 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { callLogs, customers, leads, orders, users } from '@/lib/db/schema';
+import { callLogs, customers, leads, leadLifecycleFollowups, orders, users } from '@/lib/db/schema';
 
 export async function GET(_request: Request, context: { params: Promise<{ customerId: string }> }) {
   try {
@@ -39,6 +39,7 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         leadType: leads.lead_type,
         activityStatus: leads.activity_status,
         currentFollowupNumber: leads.current_followup_number,
+        brand: leads.brand,
         source: leads.source,
         purchaseDate: leads.purchase_date,
         variant: leads.variant,
@@ -51,6 +52,7 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
       .select({
         id: orders.id,
         productName: orders.product_name,
+        sku: orders.sku,
         quantity: orders.quantity,
         totalAmount: orders.total_amount,
         orderDate: orders.order_date,
@@ -67,15 +69,20 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         notes: callLogs.attempt_notes,
         timestamp: callLogs.created_at,
         followupNumber: callLogs.followup_number,
+        recordingUrl: callLogs.provider_recording_url,
+        rawPayload: callLogs.raw_payload,
+        followupPayload: leadLifecycleFollowups.payload,
         dtName: users.name,
       })
       .from(callLogs)
       .innerJoin(leads, eq(callLogs.lead_id, leads.id))
+      .leftJoin(leadLifecycleFollowups, eq(callLogs.followup_id, leadLifecycleFollowups.id))
       .leftJoin(users, eq(callLogs.dt_id, users.id))
       .where(and(eq(callLogs.customer_id, customerId), leadMatchesCrmBrand(brand)))
       .orderBy(asc(callLogs.created_at));
 
     const ltv = customerOrders.reduce((sum, row) => sum + Number(row.totalAmount ?? 0), 0);
+    const latestOrder = customerOrders[0];
 
     return NextResponse.json({
       customer: {
@@ -87,11 +94,14 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         assignedDtId: leadRow?.assignedDtId ?? null,
         currentLifecycleStage: leadRow?.activityStatus ?? 'inactive',
         currentFollowupStage: leadRow?.currentFollowupNumber ?? null,
+        brand: leadRow?.brand ?? null,
         source: leadRow?.source ?? null,
         purchaseDate: leadRow?.purchaseDate ?? null,
         variant: leadRow?.variant ?? null,
         ltvScore: String(ltv),
         createdAt: customerRow.createdAt,
+        latestProductName: latestOrder?.productName ?? null,
+        sku: latestOrder?.sku ?? null,
       },
       orders: customerOrders,
       interactions: interactions.map((row) => ({
@@ -100,6 +110,14 @@ export async function GET(_request: Request, context: { params: Promise<{ custom
         notes: row.notes,
         timestamp: row.timestamp,
         followupNumber: row.followupNumber,
+        recordingUrl: row.recordingUrl ?? null,
+        structuredData: null,
+        formData:
+          row.followupPayload && typeof row.followupPayload === 'object' && row.followupPayload !== null
+            ? (row.followupPayload as Record<string, unknown>)
+            : row.rawPayload && typeof row.rawPayload === 'object' && row.rawPayload !== null
+              ? (row.rawPayload as Record<string, unknown>)
+              : null,
         dt: row.dtName ? { name: row.dtName } : null,
       })),
     });

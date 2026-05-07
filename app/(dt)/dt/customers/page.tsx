@@ -11,9 +11,6 @@ import {
   Card,
   Timeline,
   App,
-  Row,
-  Col,
-  Statistic,
   Tooltip,
   Button,
   Select,
@@ -25,8 +22,6 @@ import {
   UserOutlined,
   PhoneOutlined,
   MailOutlined,
-  DollarOutlined,
-  ShoppingOutlined,
   EllipsisOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -49,6 +44,9 @@ interface Customer {
   createdAt: string;
   latestProductName?: string | null;
   sku?: string | null;
+  source?: string | null;
+  variant?: string | null;
+  brand?: 'fitty' | 'fitelo' | null;
 }
 
 interface CustomerHistory {
@@ -68,6 +66,9 @@ interface CustomerHistory {
     timestamp: string;
     followupNumber: number;
     dt: { name: string } | null;
+    recordingUrl?: string | null;
+    formData?: Record<string, unknown> | null;
+    structuredData?: Record<string, unknown> | null;
   }>;
 }
 
@@ -403,61 +404,75 @@ export default function CustomersPage() {
               </Space>
             </Card>
 
-            <Row gutter={16}>
-              <Col span={12}>
-                <Card>
-                  <Statistic title="Total Orders" value={customerHistory.orders.length} prefix={<ShoppingOutlined />} />
-                </Card>
-              </Col>
-              <Col span={12}>
-                <Card>
-                  <Statistic
-                    title="LTV"
-                    value={parseFloat(customerHistory.customer.ltvScore || '0')}
-                    prefix={<DollarOutlined />}
-                    precision={0}
-                  />
-                </Card>
-              </Col>
-            </Row>
-
-            <Card title="Order History">
-              <Timeline
-                items={customerHistory.orders.map((order) => ({
-                  content: (
-                    <Space direction="vertical" size={0}>
-                      {order.productName ? <Text strong style={{ fontSize: 14 }}>{order.productName}</Text> : null}
-                      <Text>
-                        ₹{parseFloat(order.totalAmount || '0').toFixed(0)} • Qty: {order.quantity}
-                      </Text>
-                      <Text type="secondary">{dayjs(order.orderDate).format('MMM D, YYYY')}</Text>
-                      <Tag color={order.deliveryStatus === 'delivered' ? 'green' : 'orange'}>{order.deliveryStatus}</Tag>
-                    </Space>
-                  ),
-                  color: order.deliveryStatus === 'delivered' ? '#1d4838' : '#134175',
-                }))}
-              />
-            </Card>
-
             <Card title="Interaction History">
               <Timeline
                 items={[...customerHistory.interactions]
+                  .filter((i) => (i.outcome || '').toLowerCase() !== 'initiated')
                   .sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf())
-                  .map((interaction) => ({
-                  content: (
-                    <Space direction="vertical" size={0}>
-                      <Text strong>{interaction.outcome === 'connected' ? '✓ Call Connected' : `× ${interaction.outcome}`}</Text>
-                      <Text type="secondary">{dayjs(interaction.timestamp).format('MMM D, YYYY h:mm A')}</Text>
-                      <Text type="secondary">by {interaction.dt?.name || 'Unknown DT'}</Text>
-                      {interaction.notes ? (
-                        <Text type="secondary" style={{ fontSize: 13 }}>
-                          • Notes: {interaction.notes}
-                        </Text>
+                  .map((interaction) => {
+                    const productName = (() => {
+                      const brand = customerHistory.customer.brand;
+                      if (brand === 'fitty') return 'GLP';
+                      if (brand === 'fitelo') return 'Smart Scale';
+                      return customerHistory.customer.latestProductName?.trim() || customerHistory.customer.sku?.trim() || '';
+                    })();
+                    const variant = customerHistory.customer.variant?.trim() || '';
+                    const source = customerHistory.customer.source?.trim() || '';
+                    const formEntries = Object.entries(interaction.formData || {}).filter(([, value]) => {
+                      // Hide internal lifecycle metadata / noise
+                      // (these come from lead_lifecycle_followups.payload)
+                      // and are not meant for Customer 360 display.
+                      // Note: key-based filtering is handled below.
+                      if (value === null || value === undefined) return false;
+                      if (typeof value === 'string' && value.trim() === '') return false;
+                      if (Array.isArray(value) && value.length === 0) return false;
+                      if (typeof value === 'boolean' && value === false) return false;
+                      return true;
+                    });
+                    const filteredFormEntries = formEntries.filter(([key]) => {
+                      const k = key.trim().toLowerCase();
+                      return k !== 'objective' && k !== 'escalated';
+                    });
+
+                    return {
+                      content: (
+                        <Space direction="vertical" size={0}>
+                          <Text strong>{interaction.outcome === 'connected' ? '✓ Call Connected' : `× ${interaction.outcome}`}</Text>
+                          <Text type="secondary">{dayjs(interaction.timestamp).format('MMM D, YYYY h:mm A')}</Text>
+                          <Text type="secondary">by {interaction.dt?.name || 'Unknown DT'}</Text>
+                          {interaction.notes ? (
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                              • Notes: {interaction.notes}
+                            </Text>
+                          ) : null}
+                      {productName || variant || source ? (
+                        <Space size={6} wrap style={{ marginTop: 4 }}>
+                          {productName ? <Tag color="#134175">Product: {productName}</Tag> : null}
+                          {variant ? <Tag color="#e7580b">Variant: {variant}</Tag> : null}
+                          {source ? <Tag color="#1d4838">Source: {source}</Tag> : null}
+                        </Space>
                       ) : null}
-                    </Space>
-                  ),
-                  color: interaction.outcome === 'connected' ? '#1d4838' : '#666660',
-                }))}
+                          {interaction.outcome === 'connected' && filteredFormEntries.length > 0 ? (
+                            <div style={{ marginTop: 4, lineHeight: 1.6 }}>
+                              {filteredFormEntries.map(([key, value]) => {
+                                const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, (s: string) => s.toUpperCase());
+                                const displayValue = Array.isArray(value) ? value.join(', ') : String(value);
+                                return (
+                                  <span key={key} style={{ marginRight: 8 }}>
+                                    <Text type="secondary" style={{ fontSize: 13 }}>
+                                      • {label}:
+                                    </Text>
+                                    <Text style={{ fontSize: 13 }}> {displayValue}</Text>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </Space>
+                      ),
+                      color: interaction.outcome === 'connected' ? '#1d4838' : '#666660',
+                    };
+                  })}
               />
             </Card>
           </Space>
