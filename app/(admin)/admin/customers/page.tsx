@@ -11,9 +11,6 @@ import {
   Card,
   Timeline,
   App,
-  Row,
-  Col,
-  Statistic,
   Spin,
   Tooltip,
   Select,
@@ -23,14 +20,14 @@ import {
 } from 'antd';
 import type { MenuProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { UserOutlined, PhoneOutlined, MailOutlined, DollarOutlined, ShoppingOutlined, EllipsisOutlined } from '@ant-design/icons';
+import { UserOutlined, PhoneOutlined, MailOutlined, EllipsisOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import FollowupModal from '@/components/dt/FollowupModal';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 const { Title, Paragraph, Text } = Typography;
 const { Search } = Input;
-interface Customer { id: string; name: string; phone: string; email: string; leadType?: 'review' | 'nps' | null; currentLifecycleStage: string; currentFollowupStage?: number | null; ltvScore: string; lastOrderDate: string; createdAt: string; assignedDtId: string | null; latestProductName?: string | null; sku?: string | null; }
+interface Customer { id: string; name: string; phone: string; email: string; leadType?: 'review' | 'nps' | null; currentLifecycleStage: string; currentFollowupStage?: number | null; ltvScore: string; lastOrderDate: string; createdAt: string; assignedDtId: string | null; latestProductName?: string | null; sku?: string | null; source?: string | null; variant?: string | null; brand?: 'fitty' | 'fitelo' | null; }
 interface DT { id: string; name: string; email: string; }
 interface Order { productName?: string | null; totalAmount?: string | null; quantity?: number | null; orderDate?: string | Date | null; deliveryStatus?: string | null; }
 interface Interaction { timestamp: string; structuredData: Record<string, unknown> | null; outcome?: string | null; recordingUrl?: string | null; dt?: { name?: string | null } | null; followupNumber?: number | null; formData?: Record<string, unknown> | null; }
@@ -179,10 +176,96 @@ export default function AllCustomersPage() {
         {historyLoading ? <div style={{ textAlign: 'center', padding: '50px' }}><Spin size="large" /></div> : customerHistory && (
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
             <Card><Space direction="vertical" size="small" style={{ width: '100%' }}><Title level={4}>{customerHistory.customer.name}</Title><Text><PhoneOutlined /> {customerHistory.customer.phone}</Text>{customerHistory.customer.email && <Text><MailOutlined /> {customerHistory.customer.email}</Text>}</Space></Card>
-            <Row gutter={16}><Col span={12}><Card><Statistic title="Total Orders" value={customerHistory.orders.length} prefix={<ShoppingOutlined />} /></Card></Col><Col span={12}><Card><Statistic title="LTV" value={parseFloat(customerHistory.customer.ltvScore || '0')} prefix={<DollarOutlined />} precision={0} /></Card></Col></Row>
-            <Card title="Weight Progress"><Text type="secondary">Weight trend widget not available in this build.</Text></Card>
-            <Card title="Order History"><Timeline items={customerHistory.orders.map((orderRaw) => { const order = orderRaw; return { content: <Space direction="vertical" size={0}>{order.productName && <Text strong style={{ fontSize: 14 }}>{order.productName}</Text>}<Text>₹{parseFloat(order.totalAmount || '0').toFixed(0)} • Qty: {order.quantity ?? '-'}</Text><Text type="secondary">{dayjs(order.orderDate).format('MMM D, YYYY')}</Text><Tag color={order.deliveryStatus === 'delivered' ? '#1d4838' : '#e7580b'}>{order.deliveryStatus}</Tag></Space>, color: order.deliveryStatus === 'delivered' ? '#1d4838' : '#134175' }; })} /></Card>
-            <Card title="Interaction History"><Timeline items={customerHistory.interactions.map((interaction) => { const formEntries = Object.entries(interaction.formData || {}).filter(([, value]) => value !== null && value !== undefined && value !== '' && (!Array.isArray(value) || value.length > 0)); return { content: <Space direction="vertical" size={0}><Space size={12} wrap><Text strong>{interaction.outcome === 'connected' ? '✓ Call Connected' : `× ${interaction.outcome}`}</Text>{interaction.outcome === 'connected' && interaction.recordingUrl && <div onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 10px', borderRadius: 999, background: token.colorFillTertiary, border: `1px solid ${token.colorBorderSecondary}` }}><Text type="secondary" style={{ fontSize: 12, margin: 0 }}>Recording</Text><audio controls preload="none" src={interaction.recordingUrl} style={{ height: 28, maxWidth: 260, verticalAlign: 'middle' }} /></div>}</Space><Text type="secondary">{dayjs(interaction.timestamp).format('MMM D, YYYY h:mm A')}</Text><Text type="secondary">by {interaction.dt?.name || 'Unknown DT'}</Text>{interaction.outcome === 'connected' && formEntries.length > 0 && <div style={{ marginTop: 4, lineHeight: 1.6 }}>{formEntries.map(([key, value]) => { const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, (s: string) => s.toUpperCase()); const displayValue = Array.isArray(value) ? value.join(', ') : String(value); return <span key={key} style={{ marginRight: 8 }}><Text type="secondary" style={{ fontSize: 13 }}>• {label}:</Text><Text style={{ fontSize: 13 }}> {displayValue}</Text></span>; })}</div>}</Space>, color: interaction.outcome === 'connected' ? '#1d4838' : '#666660' }; })} /></Card>
+            <Card title="Interaction History">
+              <Timeline
+                items={customerHistory.interactions
+                  .filter((i) => (i.outcome || '').toLowerCase() !== 'initiated')
+                  .map((interaction) => {
+                  const formEntries = Object.entries(interaction.formData || {}).filter(([, value]) => {
+                    if (value === null || value === undefined) return false;
+                    if (typeof value === 'string' && value.trim() === '') return false;
+                    if (Array.isArray(value) && value.length === 0) return false;
+                    if (typeof value === 'boolean' && value === false) return false;
+                    return true;
+                  });
+                  const filteredFormEntries = formEntries.filter(([key]) => {
+                    const k = key.trim().toLowerCase();
+                    return k !== 'objective' && k !== 'escalated';
+                  });
+
+                  const productName = (() => {
+                    const brand = customerHistory.customer.brand;
+                    if (brand === 'fitty') return 'GLP';
+                    if (brand === 'fitelo') return 'Smart Scale';
+                    return customerHistory.customer.latestProductName?.trim() || customerHistory.customer.sku?.trim() || '';
+                  })();
+                  const variant = customerHistory.customer.variant?.trim() || '';
+                  const source = customerHistory.customer.source?.trim() || '';
+
+                  return {
+                    content: (
+                      <Space direction="vertical" size={0}>
+                        <Space size={12} wrap>
+                          <Text strong>{interaction.outcome === 'connected' ? '✓ Call Connected' : `× ${interaction.outcome}`}</Text>
+                          {interaction.outcome === 'connected' && interaction.recordingUrl ? (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '4px 10px',
+                                borderRadius: 999,
+                                background: token.colorFillTertiary,
+                                border: `1px solid ${token.colorBorderSecondary}`,
+                              }}
+                            >
+                              <Text type="secondary" style={{ fontSize: 12, margin: 0 }}>
+                                Recording
+                              </Text>
+                              <audio
+                                controls
+                                preload="none"
+                                src={interaction.recordingUrl}
+                                style={{ height: 28, maxWidth: 260, verticalAlign: 'middle' }}
+                              />
+                            </div>
+                          ) : null}
+                        </Space>
+                        <Text type="secondary">{dayjs(interaction.timestamp).format('MMM D, YYYY h:mm A')}</Text>
+                        <Text type="secondary">by {interaction.dt?.name || 'Unknown DT'}</Text>
+                        {productName || variant || source ? (
+                          <Space size={6} wrap style={{ marginTop: 4 }}>
+                            {productName ? <Tag color="#134175">Product: {productName}</Tag> : null}
+                            {variant ? <Tag color="#e7580b">Variant: {variant}</Tag> : null}
+                            {source ? <Tag color="#1d4838">Source: {source}</Tag> : null}
+                          </Space>
+                        ) : null}
+                        {interaction.outcome === 'connected' && filteredFormEntries.length > 0 ? (
+                          <div style={{ marginTop: 4, lineHeight: 1.6 }}>
+                            {filteredFormEntries.map(([key, value]) => {
+                              const label = key
+                                .replace(/([A-Z])/g, ' $1')
+                                .replace(/^./, (s: string) => s.toUpperCase());
+                              const displayValue = Array.isArray(value) ? value.join(', ') : String(value);
+                              return (
+                                <span key={key} style={{ marginRight: 8 }}>
+                                  <Text type="secondary" style={{ fontSize: 13 }}>
+                                    • {label}:
+                                  </Text>
+                                  <Text style={{ fontSize: 13 }}> {displayValue}</Text>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </Space>
+                    ),
+                    color: interaction.outcome === 'connected' ? '#1d4838' : '#666660',
+                  };
+                })}
+              />
+            </Card>
           </Space>
         )}
       </Drawer>
