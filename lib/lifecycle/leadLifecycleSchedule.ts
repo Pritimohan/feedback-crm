@@ -36,6 +36,14 @@ export function scheduleInitialFollowup(anchorDate: Date): Date {
   return scheduled;
 }
 
+/** First follow-up always the next calendar day at {@link NEXT_DAY_RETRY_HOUR} (warranty / dietplan APIs). */
+export function scheduleInitialFollowupNextCalendarDay(anchorDate: Date): Date {
+  const scheduled = new Date(anchorDate);
+  scheduled.setDate(scheduled.getDate() + 1);
+  scheduled.setHours(NEXT_DAY_RETRY_HOUR, 0, 0, 0);
+  return scheduled;
+}
+
 function getFittyNextFollowupOffsetDays(currentFollowupNumber: number): number {
   if (currentFollowupNumber === 0) return 3;
   if (currentFollowupNumber === 1) return 2;

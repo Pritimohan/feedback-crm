@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   computeRetrySchedule,
   scheduleInitialFollowup,
+  scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
 } from '../lib/lifecycle/leadLifecycleSchedule';
 import {
@@ -53,6 +54,22 @@ function run() {
   assert.equal(afterCutoffInitialFollowup.getDate(), 2);
   assert.equal(afterCutoffInitialFollowup.getHours(), 9);
   assert.equal(afterCutoffInitialFollowup.getMinutes(), 0);
+
+  const nextDayMorning = scheduleInitialFollowupNextCalendarDay(new Date(2026, 4, 15, 10, 0, 0, 0));
+  assert.equal(nextDayMorning.getFullYear(), 2026);
+  assert.equal(nextDayMorning.getMonth(), 4);
+  assert.equal(nextDayMorning.getDate(), 16);
+  assert.equal(nextDayMorning.getHours(), 9);
+  assert.equal(nextDayMorning.getMinutes(), 0);
+
+  const nextDayAfterEveningAnchor = scheduleInitialFollowupNextCalendarDay(
+    new Date(2026, 4, 15, 20, 30, 0, 0)
+  );
+  assert.equal(nextDayAfterEveningAnchor.getFullYear(), 2026);
+  assert.equal(nextDayAfterEveningAnchor.getMonth(), 4);
+  assert.equal(nextDayAfterEveningAnchor.getDate(), 16);
+  assert.equal(nextDayAfterEveningAnchor.getHours(), 9);
+  assert.equal(nextDayAfterEveningAnchor.getMinutes(), 0);
 
   const fittyStage0Next = scheduleNextFollowupFromConnected({
     referenceDate: now,

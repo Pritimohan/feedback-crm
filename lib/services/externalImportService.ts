@@ -72,15 +72,21 @@ export async function resolveOrCreateLeadForCustomer(params: {
   return { lead, created: true };
 }
 
+export type EnsureLifecycleForLeadOptions = {
+  scheduleFirstCallNextCalendarDay?: boolean;
+};
+
 export async function ensureLifecycleForLead(
   leadId: string,
   anchorDate?: string,
-  tx?: FeedbackDbTransaction
+  tx?: FeedbackDbTransaction,
+  options?: EnsureLifecycleForLeadOptions
 ) {
   return createLifecycleForLead({
     leadId,
     anchorDate: anchorDate ? new Date(anchorDate) : new Date(),
     lifecycleType: 'feedback_default',
     tx,
+    scheduleFirstCallNextCalendarDay: options?.scheduleFirstCallNextCalendarDay,
   });
 }
