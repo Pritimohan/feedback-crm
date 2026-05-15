@@ -7,7 +7,10 @@ import {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CreateCustomerInput;
-    const result = await createOrEnsureCustomerLifecycle(body, 'fitty');
+    const result = await createOrEnsureCustomerLifecycle(
+      { ...body, scheduleFirstCallNextCalendarDay: true },
+      'fitty'
+    );
     if (result.status === 'created') {
       return NextResponse.json({ data: result.data }, { status: 201 });
     }

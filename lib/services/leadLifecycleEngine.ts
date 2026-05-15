@@ -24,6 +24,7 @@ import {
   computeRetrySchedule,
   DEFAULT_LEAD_LIFECYCLE_TEMPLATE,
   scheduleInitialFollowup,
+  scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
 } from '@/lib/lifecycle/leadLifecycleSchedule';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
@@ -48,8 +49,17 @@ export async function createLifecycleForLead(params: {
   templateKey?: string;
   templateVersion?: number;
   tx?: FeedbackDbTransaction;
+  scheduleFirstCallNextCalendarDay?: boolean;
 }) {
-  const { leadId, anchorDate, lifecycleType, templateKey, templateVersion, tx: outerTx } = params;
+  const {
+    leadId,
+    anchorDate,
+    lifecycleType,
+    templateKey,
+    templateVersion,
+    tx: outerTx,
+    scheduleFirstCallNextCalendarDay,
+  } = params;
   const now = new Date();
 
   const insertLifecycle = async (d: FeedbackDbTransaction) => {
@@ -84,7 +94,9 @@ export async function createLifecycleForLead(params: {
       })
       .returning();
 
-    const firstScheduledDate = scheduleInitialFollowup(anchorDate);
+    const firstScheduledDate = scheduleFirstCallNextCalendarDay
+      ? scheduleInitialFollowupNextCalendarDay(anchorDate)
+      : scheduleInitialFollowup(anchorDate);
     const maxAttempts = DEFAULT_LEAD_LIFECYCLE_TEMPLATE.maxAttemptsByLeadType[leadRow.lead.lead_type];
 
     await d.insert(leadLifecycleFollowups).values({
