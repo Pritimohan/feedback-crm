@@ -40,6 +40,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
+  const [status, setstatus] =useState(true)
 
   const [selectedDietitian, setSelectedDietitian] = useState<{
     dtId: string;
@@ -463,7 +464,12 @@ export default function AnalyticsPage() {
     { key: 'pipeline', label: 'Pipeline & Alerts' },
   ];
 
-  return (
+ if (status) return <>
+ <div className="analytics-page flex justify-center items-center">
+  <h1 className="text-4xl">Under Construction</h1>
+ </div>
+ </>
+ else {return (
     <div className="analytics-page">
       {contextHolder}
       <div className="analytics-tabs">
@@ -651,5 +657,5 @@ export default function AnalyticsPage() {
         dateRangeLabel={dateRangeLabel}
       />
     </div>
-  );
-}
+  );}
+  }
