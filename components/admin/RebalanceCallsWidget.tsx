@@ -1,67 +1,607 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Button, Modal, Table, Tag, message, Alert, Space, Statistic, Row, Col, Card, InputNumber, Typography } from 'antd';
-import { SyncOutlined, WarningOutlined, CheckCircleOutlined, SwapOutlined, PhoneOutlined, CalendarOutlined } from '@ant-design/icons';
+import { useState, useMemo, useCallback } from 'react';
+import {
+  Button, Modal, Table, Tag, Alert, Space, Statistic,
+  Row, Col, Card, InputNumber, Typography, Collapse, Tooltip, message,
+} from 'antd';
+import {
+  SyncOutlined, SwapOutlined, CalendarOutlined, LockOutlined,
+  InfoCircleOutlined, CheckCircleOutlined, WarningOutlined,
+  DownOutlined, UpOutlined,
+} from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-const { Text } = Typography;
+import {
+  getReassignableTotal,
+  getLockedTotal,
+  getCurrentTotal,
+} from '@/lib/rebalance/buildRebalanceDistribution';
+import { computeAfterDistribution } from '@/lib/rebalance/computeRebalancePreview';
+import type { RebalanceDtRow, RebalanceConfig, PoolSummary } from '@/lib/rebalance/rebalanceDistribution.types';
 
-interface Distribution { dtId: string; dtName: string; dtEmail?: string; todaysCalls: number; }
-interface RebalancePreview { currentDistribution: Distribution[]; proposedDistribution: Distribution[]; activeDTs: { id: string; name: string; email: string }[]; totalTodaysCalls: number; customersToMove: number; }
-interface RebalanceResult { success: boolean; message: string; customersReassigned: number; totalTodaysCalls: number; newDistribution: Distribution[]; }
-interface RebalanceCallsWidgetProps { onRebalanceComplete?: () => void; }
+const { Text, Paragraph } = Typography;
 
-function computePercentages(activeDTs: { id: string }[], adminInputs: Record<string, number | ''>): { pct: Record<string, number>; error: string | null } {
-  const specified: { dtId: string; val: number }[] = []; const unspecified: string[] = [];
-  for (const dt of activeDTs) { const v = adminInputs[dt.id]; if (v !== '' && v !== undefined && !Number.isNaN(v)) specified.push({ dtId: dt.id, val: v }); else unspecified.push(dt.id); }
-  const specifiedSum = specified.reduce((s, x) => s + x.val, 0);
-  if (specifiedSum > 100) return { pct: {}, error: `Specified percentages total ${specifiedSum.toFixed(1)}% (max 100%)` };
-  if (specified.length === activeDTs.length && Math.abs(specifiedSum - 100) > 0.01) return { pct: {}, error: `All percentages specified must total 100% (got ${specifiedSum.toFixed(1)}%)` };
-  const remainder = 100 - specifiedSum; const autoPct = unspecified.length > 0 ? remainder / unspecified.length : 0;
-  const pct: Record<string, number> = {}; for (const { dtId, val } of specified) pct[dtId] = val; for (const dtId of unspecified) pct[dtId] = autoPct; return { pct, error: null };
+interface RebalancePreview {
+  rebalanceConfig: RebalanceConfig;
+  poolSummary: PoolSummary;
 }
-function allocateByPercentages(total: number, activeDTs: { id: string }[], pct: Record<string, number>): Record<string, number> {
-  const exact = activeDTs.map((dt) => ({ dtId: dt.id, exact: (total * (pct[dt.id] ?? 0)) / 100 })); const floor = exact.map((x) => Math.floor(x.exact));
-  const remaining = total - floor.reduce((s, x) => s + x, 0); const frac = exact.map((x, i) => ({ i, frac: x.exact - Math.floor(x.exact) })); frac.sort((a, b) => b.frac - a.frac);
-  for (let r = 0; r < remaining; r++) floor[frac[r].i]++; const out: Record<string, number> = {}; activeDTs.forEach((dt, i) => { out[dt.id] = floor[i]; }); return out;
+
+interface RebalanceCallsWidgetProps {
+  onRebalanceComplete?: () => void;
 }
 
 export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceCallsWidgetProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false); const [loading, setLoading] = useState(false); const [rebalancing, setRebalancing] = useState(false);
-  const [preview, setPreview] = useState<RebalancePreview | null>(null); const [result, setResult] = useState<RebalanceResult | null>(null); const [percentages, setPercentages] = useState<Record<string, number | ''>>({});
-  const fetchPreview = async () => { try { setLoading(true); setResult(null); const response = await fetch('/api/admin/rebalance'); if (!response.ok) throw new Error((await response.json()).error || 'Failed to fetch distribution preview'); const data = await response.json(); setPreview(data); setPercentages(Object.fromEntries(data.activeDTs.map((dt: { id: string }) => [dt.id, '']))); } catch (error) { message.error(error instanceof Error ? error.message : 'Failed to load distribution preview'); } finally { setLoading(false); } };
-  const { pct: computedPct, error: pctError } = useMemo(() => (!preview ? { pct: {}, error: null } : computePercentages(preview.activeDTs, percentages)), [preview, percentages]);
-  const isUsingCustomPercentages = useMemo(() => !!preview && preview.activeDTs.some((dt) => percentages[dt.id] !== '' && percentages[dt.id] !== undefined), [preview, percentages]);
-  const effectiveProposedDistribution = useMemo(() => { if (!preview) return []; if (!isUsingCustomPercentages || pctError) return preview.proposedDistribution; const allocated = allocateByPercentages(preview.totalTodaysCalls, preview.activeDTs, computedPct); return preview.activeDTs.map((dt) => ({ dtId: dt.id, dtName: dt.name, dtEmail: dt.email, todaysCalls: allocated[dt.id] ?? 0 })); }, [preview, isUsingCustomPercentages, pctError, computedPct]);
-  const effectiveCustomersToMove = useMemo(() => { if (!preview) return 0; const current = preview.currentDistribution.map((d) => ({ dtId: d.dtId, count: d.todaysCalls })); const proposed = effectiveProposedDistribution.map((d) => ({ dtId: d.dtId, count: d.todaysCalls })); let toMove = 0; for (const c of current) { const p = proposed.find((x) => x.dtId === c.dtId); if (p && c.count > p.count) toMove += c.count - p.count; } return toMove; }, [preview, effectiveProposedDistribution]);
-  const handleRebalance = async () => { try { setRebalancing(true); const body = isUsingCustomPercentages && !pctError ? { percentages: Object.entries(computedPct).map(([dtId, percentage]) => ({ dtId, percentage })) } : undefined; const response = await fetch('/api/admin/rebalance', { method: 'POST', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined }); if (!response.ok) throw new Error((await response.json()).error || 'Failed to rebalance'); const data = await response.json(); setResult(data); message.success(data.message); await fetchPreview(); onRebalanceComplete?.(); } catch (error) { message.error(error instanceof Error ? error.message : 'Failed to rebalance'); } finally { setRebalancing(false); } };
-  const setPercentage = (dtId: string, value: number | '' | null) => setPercentages((prev) => ({ ...prev, [dtId]: value === null ? '' : value }));
-  const resetToEqual = () => { if (!preview) return; setPercentages(Object.fromEntries(preview.activeDTs.map((dt) => [dt.id, '']))); };
-  const columns: ColumnsType<Distribution & { proposed?: number; change?: number }> = [
-    { title: 'Agent', dataIndex: 'dtName', key: 'dtName' },
-    { title: <Space size="small"><span>Distribution %</span><Button type="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={resetToEqual}>Reset to equal</Button></Space>, key: 'distributionPct', align: 'center', width: 140, render: (_: unknown, record) => { const dt = preview?.activeDTs.find((a) => a.id === record.dtId); if (!dt || !preview) return null; const isSpecified = percentages[dt.id] !== '' && percentages[dt.id] !== undefined; return <Space size="small" align="center"><InputNumber min={0} max={100} step={5} value={percentages[dt.id] === '' ? undefined : (percentages[dt.id] as number)} placeholder="auto" onChange={(v) => setPercentage(dt.id, v ?? '')} style={{ width: 80 }} addonAfter="%" />{Object.keys(computedPct).length > 0 && <Text type="secondary" style={{ fontSize: 12, fontWeight: isSpecified ? 600 : 400 }}>→ {computedPct[dt.id]?.toFixed(1)}%</Text>}</Space>; } },
-    { title: 'Current', dataIndex: 'todaysCalls', key: 'current', align: 'center', render: (count: number) => <Tag color="#134175" icon={<PhoneOutlined />}>{count}</Tag> },
-    { title: 'After Rebalance', dataIndex: 'proposed', key: 'proposed', align: 'center', render: (count: number) => <Tag color="#1d4838" icon={<PhoneOutlined />}>{count}</Tag> },
-    { title: 'Change', dataIndex: 'change', key: 'change', align: 'center', render: (change: number) => change === 0 ? <Tag>No change</Tag> : <Tag color={change > 0 ? '#1d4838' : '#fcb92d'}>{change > 0 ? `+${change}` : change}</Tag> },
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [rebalancing, setRebalancing] = useState(false);
+  const [preview, setPreview] = useState<RebalancePreview | null>(null);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [expandedRows, setExpandedRows] = useState<string[]>([]);
+  const [percentages, setPercentages] = useState<Record<string, number | null>>({});
+
+  const activeConfig = preview?.rebalanceConfig;
+  const activeDTs = activeConfig?.dts ?? [];
+  const poolSummary = preview?.poolSummary;
+
+  const fetchPreview = useCallback(async () => {
+    try {
+      setLoading(true);
+      setResult(null);
+      const response = await fetch('/api/admin/rebalance');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to fetch distribution preview');
+      }
+      const data = await response.json();
+      if (!data.rebalanceConfig) {
+        throw new Error('Invalid rebalance preview response');
+      }
+      setPreview({
+        rebalanceConfig: data.rebalanceConfig,
+        poolSummary: data.poolSummary ?? {
+          totalLeads: 0,
+          totalReassignable: 0,
+          totalLocked: 0,
+          onInactiveDt: 0,
+        },
+      });
+      const initial: RebalanceDtRow[] = data.rebalanceConfig.dts ?? [];
+      setPercentages(Object.fromEntries(initial.map((dt: RebalanceDtRow) => [dt.dtId, null])));
+      setExpandedRows([]);
+    } catch (error) {
+      console.error('Error fetching preview:', error);
+      message.error(error instanceof Error ? error.message : 'Failed to load distribution preview');
+      setPreview(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleOpenModal = () => {
+    setIsModalOpen(true);
+    fetchPreview();
+  };
+
+  const totalLeads = poolSummary?.totalLeads ?? 0;
+  const totalReassignablePool = poolSummary?.totalReassignable ?? 0;
+  const totalLockedLeads = poolSummary?.totalLocked ?? 0;
+
+  const percentageSum = useMemo(
+    () => activeDTs.reduce((s, dt) => s + (percentages[dt.dtId] ?? 0), 0),
+    [activeDTs, percentages]
+  );
+  const allFilled = activeDTs.length > 0 && activeDTs.every((dt) => percentages[dt.dtId] !== null);
+  const isValid = allFilled && Math.abs(percentageSum - 100) < 0.01;
+  const canExecute =
+    !loading && !!preview && totalReassignablePool > 0 && isValid && !result;
+
+  const afterDistribution = useMemo(() => {
+    if (!preview) return [];
+    return computeAfterDistribution(activeDTs, percentages, {
+      totalReassignable: poolSummary?.totalReassignable,
+    });
+  }, [preview, activeDTs, percentages, poolSummary?.totalReassignable]);
+
+  const handleRebalance = async () => {
+    if (!isValid || !activeConfig) return;
+    try {
+      setRebalancing(true);
+      const response = await fetch('/api/admin/rebalance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          percentages: activeDTs.map((dt) => ({
+            dtId: dt.dtId,
+            percentage: percentages[dt.dtId] ?? 0,
+          })),
+        }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to rebalance');
+      }
+      const data = await response.json();
+      setResult({ success: true, message: data.message });
+      message.success(data.message);
+      await fetchPreview();
+      onRebalanceComplete?.();
+    } catch (error) {
+      console.error('Error rebalancing:', error);
+      message.error(error instanceof Error ? error.message : 'Failed to rebalance');
+    } finally {
+      setRebalancing(false);
+    }
+  };
+
+  const toggleRow = (dtId: string) =>
+    setExpandedRows((prev) =>
+      prev.includes(dtId) ? prev.filter((id) => id !== dtId) : [...prev, dtId]
+    );
+
+  const handleClose = () => {
+    setIsModalOpen(false);
+    setResult(null);
+  };
+
+  const examplePool = totalReassignablePool || 320;
+  const exampleLocked =
+    totalLockedLeads > 0
+      ? Math.round(totalLockedLeads / Math.max(activeDTs.length, 1))
+      : 30;
+  const exampleShare = Math.round(examplePool * 0.1);
+
+  const columns: ColumnsType<RebalanceDtRow> = [
+    {
+      title: 'Agent',
+      dataIndex: 'dtName',
+      key: 'dtName',
+      width: 130,
+    },
+    {
+      title: 'Current Total',
+      key: 'currentTotal',
+      align: 'center',
+      width: 130,
+      render: (_: unknown, record: RebalanceDtRow) => (
+        <Text strong>{getCurrentTotal(record)}</Text>
+      ),
+    },
+    {
+      title: (
+        <Space size={4}>
+          <span>% Share</span>
+          <Tooltip title="Percentages apply to the total reassignable pool (FU0, zero attempts, active lifecycle and lead). Locked leads stay with leads.assigned_dt_id.">
+            <InfoCircleOutlined style={{ color: '#8c8c8c', cursor: 'pointer' }} />
+          </Tooltip>
+        </Space>
+      ),
+      key: 'pct',
+      align: 'center',
+      width: 180,
+      render: (_: unknown, record: RebalanceDtRow) => (
+        <InputNumber
+          min={0}
+          max={100}
+          step={5}
+          value={percentages[record.dtId] ?? undefined}
+          placeholder="—"
+          onChange={(v) =>
+            setPercentages((prev) => ({ ...prev, [record.dtId]: v }))
+          }
+          style={{ width: 100 }}
+          addonAfter="%"
+        />
+      ),
+    },
+    {
+      title: 'After Reassignment Total',
+      key: 'afterTotal',
+      align: 'center',
+      width: 180,
+      render: (_: unknown, record: RebalanceDtRow) => {
+        const after = afterDistribution.find((d) => d.dtId === record.dtId)!;
+        const hasInput = percentages[record.dtId] !== null;
+        if (!hasInput || after?.afterTotal === null) return <Text type="secondary">—</Text>;
+        const change = after.afterTotal - after.currentTotal;
+        return (
+          <Space direction="vertical" size={2} style={{ alignItems: 'center' }}>
+            <Text strong style={{ color: '#1d4838' }}>{after.afterTotal}</Text>
+            <Tag
+              color={change > 0 ? 'green' : change < 0 ? 'orange' : 'default'}
+              style={{ margin: 0, fontSize: 11 }}
+            >
+              {change > 0 ? `+${change}` : change === 0 ? '±0' : change}
+            </Tag>
+          </Space>
+        );
+      },
+    },
+    {
+      title: '',
+      key: 'expand',
+      align: 'center' as const,
+      width: 48,
+      render: (_: unknown, record: RebalanceDtRow) => (
+        <Button
+          type="text"
+          size="small"
+          icon={expandedRows.includes(record.dtId) ? <UpOutlined /> : <DownOutlined />}
+          onClick={() => toggleRow(record.dtId)}
+        />
+      ),
+    },
   ];
-  const getTableData = () => !preview ? [] : preview.currentDistribution.map((curr) => { const prop = effectiveProposedDistribution.find((p) => p.dtId === curr.dtId); return { ...curr, proposed: prop?.todaysCalls || 0, change: (prop?.todaysCalls || 0) - curr.todaysCalls }; });
-  const getDistributionDeviation = () => !preview || preview.currentDistribution.length === 0 ? 0 : Math.max(...preview.currentDistribution.map((d) => d.todaysCalls)) - Math.min(...preview.currentDistribution.map((d) => d.todaysCalls));
-  const isBalanced = getDistributionDeviation() <= 1;
-  const canExecute = !loading && !!preview && preview.activeDTs.length > 0 && preview.totalTodaysCalls > 0 && !pctError && (isUsingCustomPercentages || !isBalanced);
+
+  const expandedRowRender = (record: RebalanceDtRow) => {
+    const after = afterDistribution.find((d) => d.dtId === record.dtId)!;
+    const hasInput = percentages[record.dtId] !== null;
+
+    return (
+      <div style={{ padding: '8px 16px', background: '#fafafa' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr>
+              <th style={{ width: 140 }} />
+              <th
+                style={{
+                  textAlign: 'center',
+                  padding: '4px 8px',
+                  color: '#555',
+                  fontWeight: 600,
+                  borderBottom: '1px solid #e8e8e8',
+                  borderRight: '1px solid #e8e8e8',
+                }}
+              >
+                Current
+              </th>
+              <th
+                style={{
+                  textAlign: 'center',
+                  padding: '4px 8px',
+                  color: '#555',
+                  fontWeight: 600,
+                  borderBottom: '1px solid #e8e8e8',
+                }}
+              >
+                After Reassignment
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={{ padding: '5px 8px' }}>
+                <Tag color="blue">Reassignable</Tag>
+              </td>
+              <td style={{ textAlign: 'center', padding: '5px 8px' }}>{after.reassignableTotal}</td>
+              <td style={{ textAlign: 'center', padding: '5px 8px' }}>
+                {hasInput && after.redistTotal !== null ? (
+                  <Text style={{ color: '#1d4838' }}>{after.redistTotal}</Text>
+                ) : (
+                  <Text type="secondary">—</Text>
+                )}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ padding: '5px 8px' }}>
+                <Tag color="default">
+                  <LockOutlined /> Locked
+                </Tag>
+              </td>
+              <td
+                style={{
+                  textAlign: 'center',
+                  padding: '5px 8px',
+                  color: '#888',
+                  borderRight: '1px solid #e8e8e8',
+                }}
+              >
+                {after.lockedTotal}
+              </td>
+              <td style={{ textAlign: 'center', padding: '5px 8px', color: '#888' }}>
+                {after.lockedTotal}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   return (
     <>
-      <Button type="primary" icon={<SyncOutlined />} onClick={() => { setIsModalOpen(true); void fetchPreview(); }}>Rebalance Today&apos;s Calls</Button>
-      <Modal title={<Space><SwapOutlined /><span>Rebalance Today&apos;s Calls</span><Tag color="#134175" icon={<CalendarOutlined />}>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Tag></Space>} open={isModalOpen} onCancel={() => setIsModalOpen(false)} width={800} footer={[<Button key="cancel" onClick={() => setIsModalOpen(false)}>Close</Button>, <Button key="rebalance" type="primary" icon={<SyncOutlined spin={rebalancing} />} loading={rebalancing} onClick={() => void handleRebalance()} disabled={!canExecute}>Execute Rebalance</Button>]}>
-        {loading ? <div style={{ textAlign: 'center', padding: '40px 0' }}><SyncOutlined spin style={{ fontSize: 32, color: '#1d4838' }} /><p style={{ marginTop: 16 }}>Loading today&apos;s call distribution...</p></div> : preview ? <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          <Row gutter={16}><Col span={8}><Card size="small"><Statistic title="Today's Calls" value={preview.totalTodaysCalls} prefix={<PhoneOutlined />} valueStyle={{ color: '#134175' }} /></Card></Col><Col span={8}><Card size="small"><Statistic title="Active Agents" value={preview.activeDTs.length} /></Card></Col><Col span={8}><Card size="small"><Statistic title="Customers to Move" value={effectiveCustomersToMove} valueStyle={{ color: effectiveCustomersToMove > 0 ? '#fcb92d' : '#1d4838' }} /></Card></Col></Row>
-          {preview.totalTodaysCalls === 0 ? <Alert message="No Calls Today" description="There are no pending calls scheduled for today." type="info" showIcon /> : !isUsingCustomPercentages && isBalanced ? <Alert message="Distribution is Balanced" description="Today's calls are already evenly distributed. No rebalancing needed." type="success" showIcon icon={<CheckCircleOutlined />} /> : isUsingCustomPercentages ? <Alert message="Custom Distribution" description="Specify percentage for one or more agents. Remaining % is split equally among others." type="info" showIcon /> : <Alert message="Uneven Distribution Detected" description={`There is a difference of ${getDistributionDeviation()} calls between the highest and lowest assigned agents. Rebalancing will distribute today's calls evenly.`} type="warning" showIcon icon={<WarningOutlined />} />}
-          {pctError && <Alert message={pctError} type="error" showIcon />}
-          {preview.totalTodaysCalls > 0 && <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Set % for one or more agents; leave empty for equal split. Remaining % is auto-calculated.</Text>}
-          <Table columns={columns} dataSource={getTableData()} rowKey="dtId" pagination={false} size="small" />
-          <Alert message="Note" description="This will only redistribute customers with today's pending calls. Future followups will continue based on the new assignments." type="info" showIcon />
-          {result && <Alert message="Rebalance Complete" description={result.message} type="success" showIcon />}
-        </Space> : <Alert message="No Active Agents" description="There are no active agents to distribute calls to." type="error" showIcon />}
+      <Button type="primary" icon={<SyncOutlined />} onClick={handleOpenModal}>
+        Rebalance Today&apos;s Calls
+      </Button>
+
+      <Modal
+        title={
+          <Space>
+            <SwapOutlined />
+            <span>Rebalance Today&apos;s Calls</span>
+            <Tag color="#134175" icon={<CalendarOutlined />}>
+              {new Date().toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              })}
+            </Tag>
+          </Space>
+        }
+        open={isModalOpen}
+        onCancel={handleClose}
+        width={980}
+        footer={[
+          <Button key="cancel" onClick={handleClose}>
+            Close
+          </Button>,
+          <Button
+            key="rebalance"
+            type="primary"
+            icon={<SyncOutlined spin={rebalancing} />}
+            loading={rebalancing}
+            onClick={handleRebalance}
+            disabled={!canExecute}
+          >
+            Execute Rebalance
+          </Button>,
+        ]}
+      >
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <SyncOutlined spin style={{ fontSize: 32, color: '#1d4838' }} />
+            <p style={{ marginTop: 16 }}>Loading today&apos;s call distribution...</p>
+          </div>
+        ) : !preview || !activeConfig ? (
+          <Alert
+            message="No Active Agents"
+            description="There are no active agents to distribute calls to."
+            type="error"
+            showIcon
+          />
+        ) : (
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <Collapse
+              size="small"
+              items={[
+                {
+                  key: 'how',
+                  label: (
+                    <Space>
+                      <InfoCircleOutlined />
+                      <span>How does rebalancing work?</span>
+                    </Space>
+                  ),
+                  children: (
+                    <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                      <Paragraph style={{ margin: 0 }}>
+                        <Tag color="blue" style={{ margin: '0 2px' }}>
+                          Reassignable
+                        </Tag>
+                        : pending followup stage 0 (counselling), zero attempts, active lifecycle,
+                        and active lead.
+                      </Paragraph>
+                      <Paragraph style={{ margin: 0 }}>
+                        <Tag color="default" style={{ margin: '0 2px' }}>
+                          <LockOutlined /> Locked
+                        </Tag>
+                        : FU1+ or any followup with attempts, or inactive lifecycle/lead (active
+                        pipeline only). Owner is <Text code>leads.assigned_dt_id</Text> and never
+                        moves on rebalance.
+                      </Paragraph>
+                      <Paragraph style={{ margin: 0 }}>
+                        The <strong>% you enter per agent</strong> is applied to the{' '}
+                        <strong>total reassignable pool</strong> across all agents shown — not to
+                        each agent&apos;s own current leads.
+                      </Paragraph>
+                      <div
+                        style={{
+                          background: '#f6f8fa',
+                          padding: '10px 14px',
+                          borderRadius: 6,
+                          borderLeft: '3px solid #134175',
+                        }}
+                      >
+                        <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                          Example — Agent A at 10%
+                        </Text>
+                        <Text
+                          type="secondary"
+                          style={{ fontSize: 12, display: 'block', marginBottom: 8 }}
+                        >
+                          The 10% applies to the total reassignable pool. Locked leads stay with
+                          the same agent.
+                        </Text>
+                        <table
+                          style={{ fontSize: 13, borderCollapse: 'collapse', width: '100%' }}
+                        >
+                          <tbody>
+                            <tr>
+                              <td style={{ padding: '2px 8px 2px 0', color: '#555' }}>
+                                Total reassignable pool
+                              </td>
+                              <td style={{ padding: '2px 8px' }}>
+                                <strong>{examplePool}</strong> leads
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style={{ padding: '2px 8px 2px 0', color: '#555' }}>
+                                Agent&apos;s share (10%)
+                              </td>
+                              <td style={{ padding: '2px 8px' }}>
+                                10% × {examplePool} = <strong>{exampleShare}</strong>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style={{ padding: '2px 8px 2px 0', color: '#555' }}>
+                                Locked leads (unchanged)
+                              </td>
+                              <td style={{ padding: '2px 8px' }}>
+                                <strong>{exampleLocked}</strong> leads
+                              </td>
+                            </tr>
+                            <tr>
+                              <td
+                                style={{
+                                  padding: '6px 8px 2px 0',
+                                  color: '#555',
+                                  fontWeight: 600,
+                                  borderTop: '1px solid #e0e0e0',
+                                }}
+                              >
+                                Final total
+                              </td>
+                              <td
+                                style={{
+                                  padding: '6px 8px 2px',
+                                  borderTop: '1px solid #e0e0e0',
+                                }}
+                              >
+                                {exampleShare} + {exampleLocked} ={' '}
+                                <strong>{exampleShare + exampleLocked}</strong>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </Space>
+                  ),
+                },
+              ]}
+            />
+
+            {activeDTs.length === 0 ? (
+              <Alert
+                type="info"
+                showIcon
+                message="No pending leads today"
+                description="There are no pending leads in the active pipeline for today."
+              />
+            ) : (
+              <>
+                <Row gutter={12}>
+                  <Col span={6}>
+                    <Card size="small">
+                      <Statistic
+                        title={
+                          <Tooltip title="Active pipeline only: pending followups on an active lifecycle and active lead, assigned to an active agent.">
+                            <Text style={{ fontSize: 12 }}>Total Leads</Text>
+                          </Tooltip>
+                        }
+                        value={totalLeads}
+                        valueStyle={{ color: '#134175', fontSize: 20 }}
+                      />
+                    </Card>
+                  </Col>
+                  <Col span={6}>
+                    <Card size="small">
+                      <Statistic
+                        title={
+                          <Tooltip title="FU0, zero attempts, active lifecycle and lead — eligible for redistribution.">
+                            <Text style={{ fontSize: 12 }}>Reassignable Leads</Text>
+                          </Tooltip>
+                        }
+                        value={totalReassignablePool}
+                        valueStyle={{ color: '#134175', fontSize: 20 }}
+                      />
+                    </Card>
+                  </Col>
+                  <Col span={6}>
+                    <Card size="small" style={{ borderColor: '#91caff' }}>
+                      <Statistic
+                        title={
+                          <Tooltip title="FU1+, attempted followups, or inactive lifecycle/lead — stay on assigned_dt_id.">
+                            <Text style={{ fontSize: 12 }}>Locked Leads</Text>
+                          </Tooltip>
+                        }
+                        value={totalLockedLeads}
+                        valueStyle={{ color: '#0958d9', fontSize: 20 }}
+                      />
+                    </Card>
+                  </Col>
+                  <Col span={6}>
+                    <Card size="small" style={{ borderColor: '#91caff' }}>
+                      <Statistic
+                        title={<Text style={{ fontSize: 12 }}>Active Agents</Text>}
+                        value={activeDTs.length}
+                        valueStyle={{ color: '#0958d9', fontSize: 20 }}
+                      />
+                    </Card>
+                  </Col>
+                </Row>
+
+                <Alert
+                  type={!allFilled ? 'info' : isValid ? 'success' : 'error'}
+                  showIcon
+                  icon={
+                    isValid ? (
+                      <CheckCircleOutlined />
+                    ) : allFilled ? (
+                      <WarningOutlined />
+                    ) : (
+                      <InfoCircleOutlined />
+                    )
+                  }
+                  message={
+                    !allFilled
+                      ? `Enter a % for each agent — all must add up to 100%. (Current total: ${percentageSum.toFixed(1)}%)`
+                      : isValid
+                        ? 'All percentages add up to 100% — ready to execute.'
+                        : `Percentages total ${percentageSum.toFixed(1)}% — must be exactly 100%.`
+                  }
+                />
+
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                    Click <DownOutlined /> on any row to see the split of reassignable and locked
+                    leads.
+                  </Text>
+                  <Table
+                    columns={columns}
+                    dataSource={activeDTs}
+                    rowKey="dtId"
+                    pagination={false}
+                    size="small"
+                    bordered
+                    expandable={{
+                      expandedRowKeys: expandedRows,
+                      expandedRowRender,
+                      showExpandColumn: false,
+                    }}
+                  />
+                </div>
+
+                <Space size="large">
+                  <Space size={4}>
+                    <Tag color="blue" style={{ margin: 0 }}>
+                      Reassignable
+                    </Tag>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Enters the redistribution pool
+                    </Text>
+                  </Space>
+                  <Space size={4}>
+                    <Tag color="default" style={{ margin: 0 }}>
+                      <LockOutlined /> Locked
+                    </Tag>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Always stays with current agent
+                    </Text>
+                  </Space>
+                </Space>
+              </>
+            )}
+
+            {result && (
+              <Alert
+                message="Rebalance Complete"
+                description={result.message}
+                type="success"
+                showIcon
+                icon={<CheckCircleOutlined />}
+              />
+            )}
+          </Space>
+        )}
       </Modal>
     </>
   );
