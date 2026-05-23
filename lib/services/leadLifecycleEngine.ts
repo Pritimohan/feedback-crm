@@ -29,6 +29,7 @@ import {
 } from '@/lib/lifecycle/leadLifecycleSchedule';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
 import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
+import { splitFeedbackFollowupsByIstDay } from '@/lib/dt/activeFollowupsCallPriority';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -464,7 +465,6 @@ export async function recordConnectedOutcome(params: {
 }
 
 export async function getActiveFollowupsForDt(dtId: string, date: Date = new Date(), brand: CrmBrand = 'fitty') {
-  const start = startOfDay(date);
   const now = date;
 
   const rows = await db
@@ -488,21 +488,13 @@ export async function getActiveFollowupsForDt(dtId: string, date: Date = new Dat
       )
     );
 
-  const overdue = rows
-    .filter((r) => r.followup.scheduled_date < start)
-    .map((r) => ({
-      ...r,
-      objective: getCallObjective(r.lead.lead_type, r.followup.followup_number),
-      available_connected_choices: getConnectedChoicesForStage(r.followup.followup_number),
-    }));
+  const enriched = rows.map((r) => ({
+    ...r,
+    objective: getCallObjective(r.lead.lead_type, r.followup.followup_number),
+    available_connected_choices: getConnectedChoicesForStage(r.followup.followup_number),
+  }));
 
-  const todayDue = rows
-    .filter((r) => r.followup.scheduled_date >= start)
-    .map((r) => ({
-      ...r,
-      objective: getCallObjective(r.lead.lead_type, r.followup.followup_number),
-      available_connected_choices: getConnectedChoicesForStage(r.followup.followup_number),
-    }));
+  const { todayDue, overdue } = splitFeedbackFollowupsByIstDay(enriched, now);
 
   return {
     overdue,

@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getCrmBrandFromCookie } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
+import {
+  buildSortedActiveFollowupCalls,
+  getTodayBoundsForFeedbackFollowups,
+} from '@/lib/dt/activeFollowupsCallPriority';
 import { getActiveFollowupsForDt } from '@/lib/services/leadLifecycleEngine';
 
 export async function GET() {
@@ -15,8 +19,16 @@ export async function GET() {
     }
 
     const brand = await getCrmBrandFromCookie();
-    const result = await getActiveFollowupsForDt(session.id, new Date(), brand);
-    return NextResponse.json(result);
+    const now = new Date();
+    const result = await getActiveFollowupsForDt(session.id, now, brand);
+    const calls = buildSortedActiveFollowupCalls(result.todayDue, result.overdue, now);
+    const dayBounds = getTodayBoundsForFeedbackFollowups(now);
+
+    return NextResponse.json({
+      ...result,
+      calls,
+      dayBounds,
+    });
   } catch (error) {
     console.error('Get active followups error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
