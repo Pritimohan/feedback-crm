@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/session';
 import {
   buildSortedActiveFollowupCalls,
   getTodayBoundsForFeedbackFollowups,
+  splitFeedbackFollowupsByIstDay,
 } from '@/lib/dt/activeFollowupsCallPriority';
 import { getActiveFollowupsForDt } from '@/lib/services/leadLifecycleEngine';
 
@@ -23,11 +24,17 @@ export async function GET() {
     const result = await getActiveFollowupsForDt(session.id, now, brand);
     const calls = buildSortedActiveFollowupCalls(result.todayDue, result.overdue, now);
     const dayBounds = getTodayBoundsForFeedbackFollowups(now);
+    const { todayDue, overdue } = splitFeedbackFollowupsByIstDay(calls, now);
 
     return NextResponse.json({
       ...result,
       calls,
-      dayBounds,
+      todayDue,
+      overdue,
+      dayBounds: {
+        dayStart: dayBounds.dayStart.toISOString(),
+        dayEnd: dayBounds.dayEnd.toISOString(),
+      },
     });
   } catch (error) {
     console.error('Get active followups error:', error);

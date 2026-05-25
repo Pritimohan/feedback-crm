@@ -83,19 +83,18 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
         setLoading(true);
         const res = await fetch('/api/dt/followups/active');
         const json = (await res.json()) as ActiveResponse;
-        if (json.calls?.length) {
-          setCalls(json.calls);
-        } else {
-          setCalls([...(json.todayDue ?? []), ...(json.overdue ?? [])]);
-        }
-        if (json.dayBounds?.dayStart && json.dayBounds?.dayEnd) {
-          setDayBounds({
-            dayStart: new Date(json.dayBounds.dayStart),
-            dayEnd: new Date(json.dayBounds.dayEnd),
-          });
-        } else {
-          setDayBounds(undefined);
-        }
+        const raw = Array.isArray(json.calls)
+          ? json.calls
+          : [...(json.todayDue ?? []), ...(json.overdue ?? [])];
+        const bounds =
+          json.dayBounds?.dayStart && json.dayBounds?.dayEnd
+            ? {
+                dayStart: new Date(json.dayBounds.dayStart),
+                dayEnd: new Date(json.dayBounds.dayEnd),
+              }
+            : undefined;
+        setDayBounds(bounds);
+        setCalls(sortFeedbackActiveFollowupCalls(raw, { dayBounds: bounds }));
       } catch {
         setCalls([]);
       } finally {
@@ -124,10 +123,6 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
   const filteredSortedCalls = useMemo(() => {
     const byFollowup = filterByFollowupNumber(calls);
     const filtered = filterByAttemptCount(byFollowup);
-    const filtersActive = followupFilter !== 'all' || attemptFilter !== 'all';
-    if (!filtersActive) {
-      return filtered;
-    }
     return sortFeedbackActiveFollowupCalls(filtered, {
       now: currentTime,
       dayBounds,

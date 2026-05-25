@@ -29,7 +29,10 @@ import {
 } from '@/lib/lifecycle/leadLifecycleSchedule';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
 import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
-import { splitFeedbackFollowupsByIstDay } from '@/lib/dt/activeFollowupsCallPriority';
+import {
+  getTodayBoundsForFeedbackFollowups,
+  splitFeedbackFollowupsByIstDay,
+} from '@/lib/dt/activeFollowupsCallPriority';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -464,8 +467,10 @@ export async function recordConnectedOutcome(params: {
   });
 }
 
+/** Pending follow-ups for a DT through end of today (IST): today's due + overdue. Matches admin call-distribution totals. */
 export async function getActiveFollowupsForDt(dtId: string, date: Date = new Date(), brand: CrmBrand = 'fitty') {
   const now = date;
+  const { dayEnd } = getTodayBoundsForFeedbackFollowups(now);
 
   const rows = await db
     .select({
@@ -483,7 +488,7 @@ export async function getActiveFollowupsForDt(dtId: string, date: Date = new Dat
         eq(leadLifecycleFollowups.assigned_dt_id, dtId),
         eq(leadLifecycles.status, 'active'),
         eq(leadLifecycleFollowups.status, 'pending'),
-        lte(leadLifecycleFollowups.scheduled_date, now),
+        lte(leadLifecycleFollowups.scheduled_date, dayEnd),
         leadMatchesCrmBrand(brand)
       )
     );

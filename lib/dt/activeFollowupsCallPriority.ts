@@ -50,33 +50,34 @@ function queueRank(row: FeedbackActiveFollowupRow, dayStart: Date, dayEnd: Date)
   return isScheduledTodayIst(row, dayStart, dayEnd) ? 0 : 1;
 }
 
-/** Most recent scheduled first within the same attempt + follow-up stage. */
-function scheduleTimeTieBreak<T extends FeedbackActiveFollowupRow>(a: T, b: T): number {
-  return scheduledMs(b) - scheduledMs(a);
+/** Within-queue compare: attempt → follow-up stage → schedule time → id (same for today and overdue). */
+function compareFeedbackCallsWithinQueue<T extends FeedbackActiveFollowupRow>(a: T, b: T): number {
+  const acA = attemptCount(a);
+  const acB = attemptCount(b);
+  if (acA !== acB) return acA - acB;
+
+  const fnA = followupNumber(a);
+  const fnB = followupNumber(b);
+  if (fnA !== fnB) return fnA - fnB;
+
+  const ta = scheduledMs(a);
+  const tb = scheduledMs(b);
+  if (ta !== tb) return tb - ta;
+
+  return String(a.followup.id).localeCompare(String(b.followup.id));
 }
 
 /**
- * Sort one queue (todayDue or overdue): attempt → follow-up stage → recent schedule first.
- * Does not mix today/overdue — call twice and concat (fitty-style per-band ordering).
+ * Sort one queue (todayDue or overdue): attempt → follow-up stage → most recent schedule first.
+ * Today and overdue use the same comparator; only the band order differs (today before overdue).
  */
 export function sortFeedbackCallBucket<T extends FeedbackActiveFollowupRow>(
   items: T[],
   queue: FeedbackSortQueue
 ): T[] {
-  return [...items].sort((a, b) => {
-    const acA = attemptCount(a);
-    const acB = attemptCount(b);
-    if (acA !== acB) return acA - acB;
-
-    const fnA = followupNumber(a);
-    const fnB = followupNumber(b);
-    if (fnA !== fnB) return fnA - fnB;
-
-    const tt = scheduleTimeTieBreak(a, b);
-    if (tt !== 0) return tt;
-
-    return String(a.followup.id).localeCompare(String(b.followup.id));
-  }).map((row) => ({ ...row, _sortQueue: queue }));
+  return [...items]
+    .sort(compareFeedbackCallsWithinQueue)
+    .map((row) => ({ ...row, _sortQueue: queue }));
 }
 
 /** Build full list: all IST-today rows first, then overdue; each band sorted by attempt → stage → recency. */
