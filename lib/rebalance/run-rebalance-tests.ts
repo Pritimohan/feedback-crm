@@ -4,12 +4,14 @@
 import assert from 'node:assert/strict';
 import {
   classifyRebalanceFollowup,
+  classifyNightlyStage0Followup,
   dueBucketFromScheduled,
 } from './classifyFollowup';
 import { allocateByPercentagesMap } from './allocateByPercentages';
 import {
   buildPlannedTargetsFromStage0Targets,
   buildStage0PlanFromPercentages,
+  buildEqualTotalStage0Plan,
 } from './rebalancePlanning';
 import { computeAfterDistribution } from './computeRebalancePreview';
 import { summarizeClassifiedRows } from './summarizePool';
@@ -30,6 +32,26 @@ function testClassifyLockedWithAttempts() {
   const bucket = classifyRebalanceFollowup({
     followupNumber: 0,
     attemptCount: 1,
+    lifecycleStatus: 'active',
+    leadActivityStatus: 'active',
+  });
+  assert.equal(bucket, 'locked');
+}
+
+function testClassifyNightlyStage0AllowsAttempts() {
+  const bucket = classifyNightlyStage0Followup({
+    followupNumber: 0,
+    attemptCount: 3,
+    lifecycleStatus: 'active',
+    leadActivityStatus: 'active',
+  });
+  assert.equal(bucket, 'reassignable');
+}
+
+function testClassifyNightlyStage0LocksFu1() {
+  const bucket = classifyNightlyStage0Followup({
+    followupNumber: 1,
+    attemptCount: 0,
     lifecycleStatus: 'active',
     leadActivityStatus: 'active',
   });
@@ -109,6 +131,28 @@ function testBuildStage0PlanFromPercentages() {
   const targetSum = [...targetStage0ByDt.values()].reduce((s, n) => s + n, 0);
   assert.equal(targetSum, 20);
   assert.equal(projectedLoads.get('a'), 5 + (targetStage0ByDt.get('a') ?? 0));
+}
+
+function testBuildEqualTotalStage0Plan() {
+  const activeDtIds = ['a', 'b', 'c'];
+  const nonEligible = new Map([
+    ['a', 5],
+    ['b', 10],
+    ['c', 3],
+  ]);
+  const totalEligible = 12;
+  const { targetStage0ByDt, projectedLoads } = buildEqualTotalStage0Plan(
+    activeDtIds,
+    nonEligible,
+    totalEligible
+  );
+  const targetSum = [...targetStage0ByDt.values()].reduce((s, n) => s + n, 0);
+  assert.equal(targetSum, totalEligible);
+  for (const dtId of activeDtIds) {
+    const fixed = nonEligible.get(dtId) ?? 0;
+    const stage0 = targetStage0ByDt.get(dtId) ?? 0;
+    assert.equal(projectedLoads.get(dtId), fixed + stage0);
+  }
 }
 
 function testPlannedTargetsPreserveOwnership() {
@@ -221,12 +265,15 @@ function testSummarizeInvariantTotalEqualsParts() {
 const tests = [
   testClassifyReassignableFu0NoAttempts,
   testClassifyLockedWithAttempts,
+  testClassifyNightlyStage0AllowsAttempts,
+  testClassifyNightlyStage0LocksFu1,
   testClassifyLockedNonStageZero,
   testClassifyLockedInactiveLifecycle,
   testClassifyLockedInactiveLead,
   testDueBucketToday,
   testAllocateByPercentagesSumsToTotal,
   testBuildStage0PlanFromPercentages,
+  testBuildEqualTotalStage0Plan,
   testPlannedTargetsPreserveOwnership,
   testComputeAfterDistribution,
   testSummarizeClassifiedRows,
