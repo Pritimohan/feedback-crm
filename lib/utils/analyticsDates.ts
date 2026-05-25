@@ -7,7 +7,20 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(quarterOfYear);
 
-const ANALYTICS_TIMEZONE = process.env.ANALYTICS_TIMEZONE || 'Asia/Kolkata';
+export const ANALYTICS_TIMEZONE = process.env.ANALYTICS_TIMEZONE || 'Asia/Kolkata';
+
+/** IST (analytics TZ) start/end of the calendar day that contains `instant`. */
+export function getAnalyticsDayBoundsForInstant(instant: Date = new Date()): {
+  startDate: Date;
+  endDate: Date;
+} {
+  const tz = ANALYTICS_TIMEZONE;
+  const d = dayjs(instant).tz(tz);
+  return {
+    startDate: d.startOf('day').toDate(),
+    endDate: d.endOf('day').toDate(),
+  };
+}
 
 export type AnalyticsFilterType =
   | 'today'
