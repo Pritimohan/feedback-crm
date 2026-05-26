@@ -30,7 +30,7 @@ function run() {
   });
   assert.equal(
     fiteloRetryAfterSecondAttemptSameDay.getDate(),
-    new Date('2026-01-03T10:00:00.000Z').getDate()
+    new Date('2026-01-04T10:00:00.000Z').getDate()
   );
   assert.equal(fiteloRetryAfterSecondAttemptSameDay.getHours(), 9);
 
@@ -83,14 +83,14 @@ function run() {
     brand: 'fitty',
     currentFollowupNumber: 1,
   });
-  assert.equal(fittyStage1Next.getTime(), new Date('2026-01-03T10:00:00.000Z').getTime());
+  assert.equal(fittyStage1Next.getTime(), new Date('2026-01-04T10:00:00.000Z').getTime());
 
   const fittyStage2Next = scheduleNextFollowupFromConnected({
     referenceDate: now,
     brand: 'fitty',
     currentFollowupNumber: 2,
   });
-  assert.equal(fittyStage2Next.getTime(), new Date('2026-01-03T10:00:00.000Z').getTime());
+  assert.equal(fittyStage2Next.getTime(), new Date('2026-01-04T10:00:00.000Z').getTime());
 
   const nonFittyNext = scheduleNextFollowupFromConnected({
     referenceDate: now,

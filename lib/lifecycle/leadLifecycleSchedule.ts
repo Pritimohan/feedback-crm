@@ -44,11 +44,10 @@ export function scheduleInitialFollowupNextCalendarDay(anchorDate: Date): Date {
   return scheduled;
 }
 
-function getFittyNextFollowupOffsetDays(currentFollowupNumber: number): number {
-  if (currentFollowupNumber === 0) return 3;
-  if (currentFollowupNumber === 1) return 2;
-  if (currentFollowupNumber === 2) return 2;
-  return DEFAULT_LEAD_LIFECYCLE_TEMPLATE.nextFollowupOffsetDays;
+const FITTY_INTERESTED_NEXT_FOLLOWUP_DAYS = 3;
+
+function getFittyNextFollowupOffsetDays(_currentFollowupNumber: number): number {
+  return FITTY_INTERESTED_NEXT_FOLLOWUP_DAYS;
 }
 
 export function scheduleNextFollowupFromConnected(params: {
