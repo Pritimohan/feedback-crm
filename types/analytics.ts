@@ -14,6 +14,13 @@ export interface OutcomeBreakdown {
   rescheduledLead: number;
 }
 
+export interface ConversionBreakdown {
+  reviewed: number;
+  issue_with_product: number;
+  interested: number;
+  dont_reviewed: number;
+}
+
 export interface AnalyticsSection {
   leads: number;
   leadBreakdown?: LeadBreakdown;
@@ -26,6 +33,18 @@ export interface AnalyticsSection {
   cnrBusyFailedWrongNumber: number;
   failedBreakdown?: OutcomeBreakdown;
   connectedPercentage: number;
+  /** Reviewed connected choices in range (conversion KPI). */
+  converted: number;
+  conversionBreakdown?: ConversionBreakdown;
+}
+
+export interface FunnelSummary {
+  totalLeads: number;
+  newLeads: number;
+  rescheduledLeads: number;
+  attempted: number;
+  connected: number;
+  converted: number;
 }
 
 export interface AnalyticsData {
@@ -33,6 +52,7 @@ export interface AnalyticsData {
   firstFollowup: AnalyticsSection;
   secondFollowup: AnalyticsSection;
   thirdFollowup: AnalyticsSection;
+  funnelSummary: FunnelSummary;
   activity: {
     attempts: number;
     uniqueCustomersCalled: number;
@@ -53,6 +73,18 @@ export type AnalyticsFilterType =
   | 'month'
   | 'quarter'
   | 'custom';
+
+export interface OutcomeCountRow {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface OutcomesAnalytics {
+  byConnectedChoice: OutcomeCountRow[];
+  byAttemptOutcome: OutcomeCountRow[];
+  dateRange: { startDate: string; endDate: string };
+}
 
 export interface RescheduledDueTodayByStage {
   counselling: number;
@@ -77,6 +109,8 @@ export interface DietitianAnalyticsRow {
   attempted: number;
   connected: number;
   connPct: number;
+  reviewed: number;
+  conversionPct: number;
   counselling: number;
   fu1Conn: number;
   fu1Att: number;

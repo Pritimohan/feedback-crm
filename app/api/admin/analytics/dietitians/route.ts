@@ -121,6 +121,20 @@ export async function GET(request: NextRequest) {
           ) AS rescheduled_leads,
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id) AS attempted,
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND LOWER(a.outcome) = 'connected') AS connected,
+          (SELECT COUNT(DISTINCT l.id)::int
+           FROM lead_lifecycle_followups lf
+           INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
+           INNER JOIN leads l ON ol.lead_id = l.id
+           WHERE l.assigned_dt_id = u.id
+             AND lf.status = 'connected'
+             AND lf.connected_date IS NOT NULL
+             AND lf.connected_date >= ${startStr}::timestamp
+             AND lf.connected_date <= ${endStr}::timestamp
+             AND lf.payload->>'connected_choice' = 'reviewed'
+             AND ol.status = 'active'
+             AND l.activity_status = 'active'
+             ${leadBrandCond}
+          ) AS reviewed,
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND LOWER(a.outcome) = 'connected' AND a.followup_number = 0) AS counselling,
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 1 AND LOWER(a.outcome) = 'connected') AS fu1_conn,
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 1) AS fu1_att,
@@ -147,6 +161,7 @@ export async function GET(request: NextRequest) {
       const row = r as Record<string, unknown>;
       const attempted = Number(row.attempted ?? 0);
       const connected = Number(row.connected ?? 0);
+      const reviewed = Number(row.reviewed ?? 0);
       const fu2Conn = Number(row.fu2_conn ?? 0);
       const fu2Att = Number(row.fu2_att ?? 0);
       const fu3Conn = Number(row.fu3_conn ?? 0);
@@ -161,7 +176,9 @@ export async function GET(request: NextRequest) {
         rescheduledLeads: Number(row.rescheduled_leads ?? 0),
         attempted,
         connected,
+        reviewed,
         connPct: attempted > 0 ? Math.round((connected / attempted) * 100) : 0,
+        conversionPct: connected > 0 ? Math.round((reviewed / connected) * 100) : 0,
         counselling: Number(row.counselling ?? 0),
         fu1Conn: Number(row.fu1_conn ?? 0),
         fu1Att: Number(row.fu1_att ?? 0),
@@ -193,7 +210,9 @@ export async function GET(request: NextRequest) {
           rescheduledLeads: 0,
           attempted: 0,
           connected: 0,
+          reviewed: 0,
           connPct: 0,
+          conversionPct: 0,
           counselling: 0,
           fu1Conn: 0,
           fu1Att: 0,

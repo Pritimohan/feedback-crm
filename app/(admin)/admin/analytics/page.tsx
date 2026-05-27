@@ -6,41 +6,41 @@ import type {
   AnalyticsData,
   AnalyticsFilterType,
   DietitianAnalyticsRow,
+  OutcomesAnalytics,
   TransactionRow,
 } from '@/types/analytics';
 import {
   MetricCard,
   DateRangeButtons,
-  OverallCallFunnel,
+  FeedbackCallFunnel,
   StageTypeCard,
   TransactionTable,
   FollowupStageCard,
   StageComparisonChart,
-  ProductFocusList,
-  WhatsAppFunnelBar,
   DietitianTable,
-  PipelinePlaceholder,
-  ConnectedByDietitianChart,
+  AgentReviewedChart,
   ConnectionVsTtcChart,
   DietitianAttemptsDrawer,
+  OutcomesBarChart,
+  AttemptOutcomesChart,
 } from '@/components/analytics';
 import type { DietitianAttemptRow } from '@/components/analytics/DietitianAttemptsDrawer';
 import './analytics-page.css';
 import { followupStageLabel } from '@/lib/utils/analyticsStageLabels';
 
-type TabKey = 'funnel' | 'followup' | 'dietitian' | 'pipeline';
+type TabKey = 'overview' | 'outcomes' | 'agents';
 
 export default function AnalyticsPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('funnel');
+  const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [filterType, setFilterType] = useState<AnalyticsFilterType>('week');
   const [customDateRange, setCustomDateRange] = useState<[string, string] | null>(null);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [outcomesData, setOutcomesData] = useState<OutcomesAnalytics | null>(null);
   const [dietitianData, setDietitianData] = useState<DietitianAnalyticsRow[]>([]);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
-  const [status, setstatus] =useState(true)
 
   const [selectedDietitian, setSelectedDietitian] = useState<{
     dtId: string;
@@ -84,33 +84,45 @@ export default function AnalyticsPage() {
           ? new URLSearchParams({ filter: filterType })
           : new URLSearchParams();
 
-      const [analyticsRes, dietitianRes, transactionsRes, dtWorkloadRes] = await Promise.all([
-        fetch(`/api/admin/analytics?${params}`),
-        fetch(`/api/admin/analytics/dietitians?${params}`),
-        fetch(`/api/admin/analytics/transactions?${params}`),
-        fetch(`/api/admin/analytics/dietitians-workload?${workloadParams}`),
-      ]);
+      const [analyticsRes, outcomesRes, dietitianRes, transactionsRes, dtWorkloadRes] =
+        await Promise.all([
+          fetch(`/api/admin/analytics?${params}`),
+          fetch(`/api/admin/analytics/outcomes?${params}`),
+          fetch(`/api/admin/analytics/dietitians?${params}`),
+          fetch(`/api/admin/analytics/transactions?${params}`),
+          fetch(`/api/admin/analytics/dietitians-workload?${workloadParams}`),
+        ]);
 
       if (!analyticsRes.ok) throw new Error('Failed to fetch analytics');
+      if (!outcomesRes.ok) throw new Error('Failed to fetch outcomes');
       if (!dietitianRes.ok) throw new Error('Failed to fetch agent analytics');
       if (!transactionsRes.ok) throw new Error('Failed to fetch transactions');
       if (!dtWorkloadRes.ok) throw new Error('Failed to fetch agent workload');
 
-      const [analyticsJson, dietitianJson, transactionsJson, dtWorkloadJson] = await Promise.all([
-        analyticsRes.json(),
-        dietitianRes.json(),
-        transactionsRes.json(),
-        dtWorkloadRes.json(),
-      ]);
+      const [analyticsJson, outcomesJson, dietitianJson, transactionsJson, dtWorkloadJson] =
+        await Promise.all([
+          analyticsRes.json(),
+          outcomesRes.json(),
+          dietitianRes.json(),
+          transactionsRes.json(),
+          dtWorkloadRes.json(),
+        ]);
 
       setAnalyticsData(analyticsJson as AnalyticsData);
+      setOutcomesData(outcomesJson as OutcomesAnalytics);
+
       type WorkloadRow = {
         dtId: string;
         todayDue: number;
         overdue: number;
         newDueToday?: number;
         rescheduledDueToday?: number;
-        rescheduledDueTodayByStage?: { counselling: number; fu1: number; fu2: number; fu3: number };
+        rescheduledDueTodayByStage?: {
+          counselling: number;
+          fu1: number;
+          fu2: number;
+          fu3: number;
+        };
         overdueDueToday?: number;
         overdueByStage?: { counselling: number; fu1: number; fu2: number; fu3: number };
         overdueAttempted?: number;
@@ -119,22 +131,7 @@ export default function AnalyticsPage() {
         callsConnected?: number;
       };
       const workloadList = (dtWorkloadJson as { dietitians?: WorkloadRow[] }).dietitians ?? [];
-      const workloadByDtId = new Map<
-        string,
-        {
-          todayDue: number;
-          overdue: number;
-          newDueToday: number;
-          rescheduledDueToday: number;
-          rescheduledDueTodayByStage: WorkloadRow['rescheduledDueTodayByStage'];
-          overdueDueToday: number;
-          overdueByStage: WorkloadRow['overdueByStage'];
-          overdueAttempted: number;
-          overdueAttemptedByStage: WorkloadRow['overdueAttemptedByStage'];
-          callsAttempted?: number;
-          callsConnected?: number;
-        }
-      >(
+      const workloadByDtId = new Map(
         workloadList.map((d) => [
           d.dtId,
           {
@@ -163,18 +160,25 @@ export default function AnalyticsPage() {
           const connected =
             useSnapshotAttempts && w?.callsConnected != null ? w.callsConnected : d.connected;
           const connPct = attempted > 0 ? Math.round((connected / attempted) * 100) : d.connPct;
+          const conversionPct =
+            connected > 0 ? Math.round((d.reviewed / connected) * 100) : d.conversionPct;
           return {
             ...d,
             todayDue: w?.todayDue ?? 0,
             overdue: w?.overdue ?? 0,
             newDueToday: useSnapshotData ? (w?.newDueToday ?? 0) : (d.newLeads ?? 0),
-            rescheduledDueToday: useSnapshotData ? (w?.rescheduledDueToday ?? 0) : (d.rescheduledLeads ?? 0),
-            rescheduledDueTodayByStage: useSnapshotData ? w?.rescheduledDueTodayByStage : undefined,
+            rescheduledDueToday: useSnapshotData
+              ? (w?.rescheduledDueToday ?? 0)
+              : (d.rescheduledLeads ?? 0),
+            rescheduledDueTodayByStage: useSnapshotData
+              ? w?.rescheduledDueTodayByStage
+              : undefined,
             overdueDueToday: useSnapshotData ? (w?.overdueDueToday ?? 0) : 0,
             overdueAttempted: useSnapshotData ? (w?.overdueAttempted ?? 0) : 0,
             attempted,
             connected,
             connPct,
+            conversionPct,
           };
         })
       );
@@ -226,23 +230,13 @@ export default function AnalyticsPage() {
   const f1 = analyticsData?.firstFollowup ?? null;
   const f2 = analyticsData?.secondFollowup ?? null;
   const f3 = analyticsData?.thirdFollowup ?? null;
+  const funnel = analyticsData?.funnelSummary;
 
-  const totalRescheduledLeads = dietitianData.reduce(
-    (s, d) => s + (d.rescheduledDueToday ?? 0),
-    0
-  );
-  const totalNewLeads = dietitianData.reduce((s, d) => s + (d.newDueToday ?? 0), 0);
-  /** Distinct leads in pool for the selected range (not sum of new + rescheduled followup rows). */
-  const totalLeads = dietitianData.reduce((s, d) => s + (d.leads ?? 0), 0);
-  const totalAttempted =
-    (c?.attempted ?? 0) + (f1?.attempted ?? 0) + (f2?.attempted ?? 0) + (f3?.attempted ?? 0);
-  const totalConnected =
-    (c?.connected ?? 0) + (f1?.connected ?? 0) + (f2?.connected ?? 0) + (f3?.connected ?? 0);
-  const totalCounselled = c?.connected ?? 0;
-  const uniqueAttempted = analyticsData?.activity?.uniqueCustomersCalled ?? 0;
-  const uniqueConnected = analyticsData?.activity?.uniqueCustomersConnected ?? 0;
+  const totalLeads = funnel?.totalLeads ?? 0;
+  const uniqueAttempted = funnel?.attempted ?? analyticsData?.activity?.uniqueCustomersCalled ?? 0;
+  const uniqueConnected = funnel?.connected ?? analyticsData?.activity?.uniqueCustomersConnected ?? 0;
+  const totalConverted = funnel?.converted ?? 0;
   const uniqueLeadsTouched = analyticsData?.activity?.uniqueLeadsTouched ?? 0;
-  const unreachableCount = totalAttempted - totalConnected;
 
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 
@@ -266,9 +260,9 @@ export default function AnalyticsPage() {
       dot: '#1D4838',
     },
     {
-      label: `${followupStageLabel(0)} · connected`,
-      value: totalCounselled,
-      subtitle: `${pct(totalCounselled, totalConnected || 1)}% of connected`,
+      label: 'Reviewed',
+      value: totalConverted,
+      subtitle: `${pct(totalConverted, uniqueConnected || 1)}% of connected`,
       dot: '#134175',
     },
     {
@@ -289,7 +283,7 @@ export default function AnalyticsPage() {
       obj: 'Onboarding',
       att: c?.attempted ?? 0,
       conn: c?.connected ?? 0,
-      sale: 0,
+      conversion: c?.converted ?? 0,
       color: '#1D4838',
     },
     {
@@ -297,7 +291,7 @@ export default function AnalyticsPage() {
       obj: 'Soft push',
       att: f1?.attempted ?? 0,
       conn: f1?.connected ?? 0,
-      sale: 0,
+      conversion: f1?.converted ?? 0,
       color: '#134175',
     },
     {
@@ -305,7 +299,7 @@ export default function AnalyticsPage() {
       obj: 'Final cadence',
       att: f2?.attempted ?? 0,
       conn: f2?.connected ?? 0,
-      sale: 0,
+      conversion: f2?.converted ?? 0,
       color: '#E7580B',
     },
     {
@@ -313,64 +307,82 @@ export default function AnalyticsPage() {
       obj: 'Final close-out',
       att: f3?.attempted ?? 0,
       conn: f3?.connected ?? 0,
-      sale: 0,
+      conversion: f3?.converted ?? 0,
       color: '#8A2BE2',
     },
   ];
 
+  const buildFollowupStage = (
+    section: typeof c,
+    config: {
+      name: string;
+      objective: string;
+      target: number;
+      statLabel: string;
+      color: string;
+      showConverted: boolean;
+      useConnectionMainPct?: boolean;
+    }
+  ) => {
+    const attempted = section?.attempted ?? 0;
+    const connected = section?.connected ?? 0;
+    const converted = section?.converted ?? 0;
+    const mainPct = config.useConnectionMainPct
+      ? attempted > 0
+        ? pct(connected, attempted)
+        : 100
+      : connected > 0
+        ? pct(converted, connected)
+        : 0;
+    return {
+      name: config.name,
+      objective: config.objective,
+      mainPct,
+      target: config.target,
+      statLabel: config.statLabel,
+      attempted,
+      connected,
+      converted,
+      onTarget: mainPct >= config.target,
+      color: config.color,
+      showConverted: config.showConverted,
+    };
+  };
+
   const followupStages = [
-    {
+    buildFollowupStage(c, {
       name: followupStageLabel(0),
       objective: 'Onboard + educate',
-      mainPct: c ? (c.attempted > 0 ? pct(c.connected, c.attempted) : 100) : 0,
       target: 85,
-      statLabel: 'Adherence goal',
-      attempted: c?.attempted ?? 0,
-      connected: c?.connected ?? 0,
-      converted: 0,
-      onTarget: true,
+      statLabel: 'Connection rate',
       color: '#1D4838',
       showConverted: false,
-    },
-    {
+      useConnectionMainPct: true,
+    }),
+    buildFollowupStage(f1, {
       name: followupStageLabel(1),
       objective: 'Soft push check-in',
-      mainPct: f1 ? (f1.connected > 0 ? pct(0, f1.connected) : 0) : 0,
       target: 20,
-      statLabel: 'Intent conv.',
-      attempted: f1?.attempted ?? 0,
-      connected: f1?.connected ?? 0,
-      converted: 0,
-      onTarget: true,
+      statLabel: 'Review conv.',
       color: '#134175',
       showConverted: true,
-    },
-    {
+    }),
+    buildFollowupStage(f2, {
       name: followupStageLabel(2),
       objective: 'Final follow-up — resolution or close-out',
-      mainPct: f2 ? (f2.connected > 0 ? pct(0, f2.connected) : 0) : 0,
       target: 50,
-      statLabel: 'Close-out conv.',
-      attempted: f2?.attempted ?? 0,
-      connected: f2?.connected ?? 0,
-      converted: 0,
-      onTarget: true,
+      statLabel: 'Review conv.',
       color: '#E7580B',
       showConverted: true,
-    },
-    {
+    }),
+    buildFollowupStage(f3, {
       name: followupStageLabel(3),
       objective: 'Final close-out call',
-      mainPct: f3 ? (f3.connected > 0 ? pct(0, f3.connected) : 0) : 0,
       target: 50,
-      statLabel: 'Close-out conv.',
-      attempted: f3?.attempted ?? 0,
-      connected: f3?.connected ?? 0,
-      converted: 0,
-      onTarget: true,
+      statLabel: 'Review conv.',
       color: '#8A2BE2',
       showConverted: true,
-    },
+    }),
   ];
 
   const stageComparisonData = [
@@ -378,25 +390,25 @@ export default function AnalyticsPage() {
       name: followupStageLabel(0),
       attempted: c?.attempted ?? 0,
       connected: c?.connected ?? 0,
-      converted: c?.connected ?? 0,
+      converted: c?.converted ?? 0,
     },
     {
       name: followupStageLabel(1),
       attempted: f1?.attempted ?? 0,
       connected: f1?.connected ?? 0,
-      converted: 0,
+      converted: f1?.converted ?? 0,
     },
     {
       name: followupStageLabel(2),
       attempted: f2?.attempted ?? 0,
       connected: f2?.connected ?? 0,
-      converted: 0,
+      converted: f2?.converted ?? 0,
     },
     {
       name: followupStageLabel(3),
       attempted: f3?.attempted ?? 0,
       connected: f3?.connected ?? 0,
-      converted: 0,
+      converted: f3?.converted ?? 0,
     },
   ];
 
@@ -411,14 +423,12 @@ export default function AnalyticsPage() {
         ).toFixed(1)
       : '0';
 
-  const topByConn = dietitianData
-    .filter((d) => d.attempted >= 5)
-    .reduce(
-      (best, d) => (d.connPct > (best?.connPct ?? -1) ? d : best),
-      null as DietitianAnalyticsRow | null
-    );
+  const topByReviewed = dietitianData.reduce(
+    (best, d) => (d.reviewed > (best?.reviewed ?? -1) ? d : best),
+    null as DietitianAnalyticsRow | null
+  );
   const topPerformer =
-    topByConn ??
+    topByReviewed ??
     dietitianData.reduce(
       (best, d) => (d.connected > (best?.connected ?? 0) ? d : best),
       null as DietitianAnalyticsRow | null
@@ -429,15 +439,17 @@ export default function AnalyticsPage() {
     null as DietitianAnalyticsRow | null
   );
 
-  const teamConnected = dietitianData.reduce((s, d) => s + d.connected, 0);
+  const teamReviewed = dietitianData.reduce((s, d) => s + d.reviewed, 0);
 
-  const dietitianKpis = [
+  const agentKpis = [
     { label: 'Avg Conn. Rate', value: `${avgConnPct}%`, subtitle: 'team average', dot: '#1D4838' },
     { label: 'Avg T-to-call', value: `${avgTtc}h`, subtitle: 'target: under 2h', dot: '#FCB92D' },
     {
       label: 'Top performer',
       value: topPerformer?.dtName?.split(' ').slice(0, 2).join(' ') ?? '—',
-      subtitle: topPerformer ? `${topPerformer.connPct}% conn · ${topPerformer.connected} connected` : '—',
+      subtitle: topPerformer
+        ? `${topPerformer.reviewed} reviewed · ${topPerformer.conversionPct}% conv`
+        : '—',
       dot: '#D5F369',
     },
     {
@@ -447,8 +459,8 @@ export default function AnalyticsPage() {
       dot: '#E7580B',
     },
     {
-      label: 'Team connected',
-      value: teamConnected,
+      label: 'Team reviewed',
+      value: teamReviewed,
       subtitle:
         filterType === 'custom' && customDateRange
           ? `${customDateRange[0]} to ${customDateRange[1]}`
@@ -458,18 +470,27 @@ export default function AnalyticsPage() {
   ];
 
   const tabs: { key: TabKey; label: string }[] = [
-    { key: 'funnel', label: 'Funnel Overview' },
-    { key: 'followup', label: 'Follow-up Stages' },
-    { key: 'dietitian', label: 'Agent Performance' },
-    { key: 'pipeline', label: 'Pipeline & Alerts' },
+    { key: 'overview', label: 'Overview' },
+    { key: 'outcomes', label: 'Outcomes' },
+    { key: 'agents', label: 'Agent Performance' },
   ];
 
- if (status) return <>
- <div className="analytics-page flex justify-center items-center">
-  <h1 className="text-4xl">Under Construction</h1>
- </div>
- </>
- else {return (
+  const dateRangeButtons = (
+    <DateRangeButtons
+      value={filterType}
+      onChange={setFilterType}
+      customDateRange={customDateRange}
+      onCustomDateRangeChange={setCustomDateRange}
+    />
+  );
+
+  const errorBanner = error ? (
+    <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+      {error}
+    </div>
+  ) : null;
+
+  return (
     <div className="analytics-page">
       {contextHolder}
       <div className="analytics-tabs">
@@ -486,19 +507,10 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      {activeTab === 'funnel' && (
+      {activeTab === 'overview' && (
         <div className="analytics-pane">
-          <DateRangeButtons
-            value={filterType}
-            onChange={setFilterType}
-            customDateRange={customDateRange}
-            onCustomDateRangeChange={setCustomDateRange}
-          />
-          {error && (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+          {dateRangeButtons}
+          {errorBanner}
           <div className="analytics-krow">
             {funnelKpis.map((k) => (
               <MetricCard
@@ -512,12 +524,14 @@ export default function AnalyticsPage() {
           </div>
           <div className="analytics-grid-2">
             <div className="analytics-card">
-              <div className="analytics-card-title">Overall call funnel</div>
-              <OverallCallFunnel
-                totalLeads={totalLeads}
-                newLeads={totalNewLeads}
-                rescheduledLeads={totalRescheduledLeads}
-              />
+              <div className="analytics-card-title">Call funnel</div>
+              {funnel ? (
+                <FeedbackCallFunnel summary={funnel} />
+              ) : (
+                <div className="text-sm" style={{ color: 'var(--text3)' }}>
+                  No funnel data
+                </div>
+              )}
             </div>
             <div className="analytics-card">
               <div className="analytics-card-title">Funnel by stage type</div>
@@ -528,29 +542,14 @@ export default function AnalyticsPage() {
                   obj={s.obj}
                   att={s.att}
                   conn={s.conn}
-                  sale={s.sale}
+                  conversion={s.conversion}
                   color={s.color}
                 />
               ))}
             </div>
           </div>
-          <div className="analytics-footer-label">Call-level activity — individual attempts</div>
-          <div className="analytics-table-wrap">
-            <TransactionTable transactions={transactions} />
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'followup' && (
-        <div className="analytics-pane">
-          <DateRangeButtons
-            value={filterType}
-            onChange={setFilterType}
-            customDateRange={customDateRange}
-            onCustomDateRangeChange={setCustomDateRange}
-          />
           <div className="mb-2 text-[10px] uppercase tracking-wider" style={{ color: 'var(--text3)' }}>
-            Each stage has a different objective & target conversion rate
+            Follow-up stages — objectives & conversion targets
           </div>
           <div className="analytics-fug">
             {followupStages.map((s) => (
@@ -572,35 +571,51 @@ export default function AnalyticsPage() {
           </div>
           <div className="analytics-card mb-4">
             <div className="analytics-card-title">
-              Stage comparison — attempted vs. connected vs. converted
+              Stage comparison — attempted vs. connected vs. reviewed
             </div>
             <div className="h-[200px]">
               <StageComparisonChart data={stageComparisonData} />
             </div>
           </div>
-          <div className="analytics-grid-2">
-            <div className="analytics-card">
-              <div className="analytics-card-title">Feedback focus per stage</div>
-              <ProductFocusList />
-            </div>
-            <div className="analytics-card">
-              <div className="analytics-card-title">Unreachable → WhatsApp fallback funnel</div>
-              <WhatsAppFunnelBar unreachableCount={unreachableCount} />
-            </div>
+          <div className="analytics-footer-label">Call-level activity — individual attempts</div>
+          <div className="analytics-table-wrap">
+            <TransactionTable transactions={transactions} />
           </div>
         </div>
       )}
 
-      {activeTab === 'dietitian' && (
+      {activeTab === 'outcomes' && (
         <div className="analytics-pane">
-          <DateRangeButtons
-            value={filterType}
-            onChange={setFilterType}
-            customDateRange={customDateRange}
-            onCustomDateRangeChange={setCustomDateRange}
-          />
+          {dateRangeButtons}
+          {errorBanner}
+          <div className="analytics-grid-2">
+            <div className="analytics-card">
+              <div className="analytics-card-title">Connected outcomes</div>
+              <OutcomesBarChart data={outcomesData?.byConnectedChoice ?? []} />
+            </div>
+            <div className="analytics-card">
+              <div className="analytics-card-title">Call attempt dispositions</div>
+              <AttemptOutcomesChart data={outcomesData?.byAttemptOutcome ?? []} />
+            </div>
+          </div>
+          <div
+            className="analytics-card mt-4 text-[11px] leading-relaxed"
+            style={{ color: 'var(--text2)' }}
+          >
+            <strong style={{ color: 'var(--fg)' }}>Reviewed</strong> is the conversion KPI — a
+            connected call where the customer completed a review. Other connected choices (issue,
+            interested, don&apos;t reviewed) are shown for context but do not count toward
+            conversion.
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'agents' && (
+        <div className="analytics-pane">
+          {dateRangeButtons}
+          {errorBanner}
           <div className="analytics-krow">
-            {dietitianKpis.map((k) => (
+            {agentKpis.map((k) => (
               <MetricCard
                 key={k.label}
                 label={k.label}
@@ -615,11 +630,11 @@ export default function AnalyticsPage() {
           </div>
           <div className="analytics-grid-2">
             <div className="analytics-card">
-              <div className="analytics-card-title">Connected customers by agent</div>
-              <ConnectedByDietitianChart
-                dietitians={dietitianData}
+              <div className="analytics-card-title">Reviewed by agent</div>
+              <AgentReviewedChart
+                agents={dietitianData}
                 selectedDtId={selectedDietitian?.dtId ?? null}
-                onSelectDietitian={fetchDietitianAttempts}
+                onSelectAgent={fetchDietitianAttempts}
               />
             </div>
             <div className="analytics-card">
@@ -627,12 +642,6 @@ export default function AnalyticsPage() {
               <ConnectionVsTtcChart dietitians={dietitianData} />
             </div>
           </div>
-        </div>
-      )}
-
-      {activeTab === 'pipeline' && (
-        <div className="analytics-pane">
-          <PipelinePlaceholder />
         </div>
       )}
 
@@ -657,5 +666,5 @@ export default function AnalyticsPage() {
         dateRangeLabel={dateRangeLabel}
       />
     </div>
-  );}
-  }
+  );
+}

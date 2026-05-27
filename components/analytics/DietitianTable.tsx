@@ -125,8 +125,20 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
             <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
               Connected
             </th>
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Connected calls with reviewed outcome in range"
+            >
+              Reviewed
+            </th>
             <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
               Conn.%
+            </th>
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Reviewed / connected"
+            >
+              Conv.%
             </th>
             <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
               {followupStageLabel(0)}
@@ -168,10 +180,17 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
               </td>
               <td className="px-3 py-2">{d.attempted}</td>
               <td className="px-3 py-2">{d.connected}</td>
+              <td className="px-3 py-2">{d.reviewed}</td>
               <td className="px-3 py-2">
                 <BadgePill
                   value={`${d.connPct}%`}
                   variant={d.connPct >= 75 ? 'green' : d.connPct >= 55 ? 'amber' : 'red'}
+                />
+              </td>
+              <td className="px-3 py-2">
+                <BadgePill
+                  value={`${d.conversionPct}%`}
+                  variant={d.conversionPct >= 40 ? 'green' : d.conversionPct >= 20 ? 'amber' : 'red'}
                 />
               </td>
               <td className="px-3 py-2">{d.counselling}</td>
