@@ -131,8 +131,6 @@ export async function GET(request: NextRequest) {
              AND lf.connected_date >= ${startStr}::timestamp
              AND lf.connected_date <= ${endStr}::timestamp
              AND lf.payload->>'connected_choice' = 'reviewed'
-             AND ol.status = 'active'
-             AND l.activity_status = 'active'
              ${leadBrandCond}
           ) AS reviewed,
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND LOWER(a.outcome) = 'connected' AND a.followup_number = 0) AS counselling,

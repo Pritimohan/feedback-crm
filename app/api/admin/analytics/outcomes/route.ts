@@ -76,11 +76,8 @@ export async function GET(request: NextRequest) {
           AND lf.connected_date >= ${startStr}::timestamp
           AND lf.connected_date <= ${endStr}::timestamp
           AND lf.payload->>'connected_choice' IS NOT NULL
-          AND ol.status = 'active'
-          AND l.activity_status = 'active'
           AND l.assigned_dt_id IS NOT NULL
           AND u.role = 'dt'
-          AND u.active_status = true
           ${brandCond}
         GROUP BY lf.payload->>'connected_choice'
       `),

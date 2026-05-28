@@ -104,11 +104,8 @@ export async function GET(request: NextRequest) {
           AND lf.connected_date IS NOT NULL
           AND lf.connected_date >= ${startIso}::timestamp
           AND lf.connected_date <= ${endIso}::timestamp
-          AND ol.status = 'active'
-          AND l.activity_status = 'active'
           AND l.assigned_dt_id IS NOT NULL
           AND u.role = 'dt'
-          AND u.active_status = true
           ${brandCond}
         GROUP BY lf.payload->>'connected_choice'
       `);
@@ -516,11 +513,8 @@ export async function GET(request: NextRequest) {
           AND lf.connected_date >= ${startIso}::timestamp
           AND lf.connected_date <= ${endIso}::timestamp
           AND lf.payload->>'connected_choice' = 'reviewed'
-          AND ol.status = 'active'
-          AND l.activity_status = 'active'
           AND l.assigned_dt_id IS NOT NULL
           AND u.role = 'dt'
-          AND u.active_status = true
           ${brandCond}
       `),
     ]);
