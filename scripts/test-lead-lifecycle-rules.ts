@@ -5,6 +5,7 @@ import {
   scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
 } from '../lib/lifecycle/leadLifecycleSchedule';
+import { shouldAdvanceIssueWithProduct } from '../lib/services/leadLifecycleEngine';
 import {
   canChooseInterested,
   computeConnectedTransition,
@@ -147,6 +148,24 @@ function run() {
     payload: { issue_description: 'Delayed delivery and wrong taste' },
   });
   assert.equal(validIssuePayloadValidation.valid, true);
+
+  const issueFirstTimeAdvances = shouldAdvanceIssueWithProduct({
+    hasIssueAdvancedOnce: false,
+    followupNumber: 1,
+  });
+  assert.equal(issueFirstTimeAdvances, true);
+
+  const issueSecondTimeCloses = shouldAdvanceIssueWithProduct({
+    hasIssueAdvancedOnce: true,
+    followupNumber: 2,
+  });
+  assert.equal(issueSecondTimeCloses, false);
+
+  const issueAtFinalStageCloses = shouldAdvanceIssueWithProduct({
+    hasIssueAdvancedOnce: false,
+    followupNumber: 3,
+  });
+  assert.equal(issueAtFinalStageCloses, false);
 
   console.log('Lead lifecycle rules tests passed.');
 }
