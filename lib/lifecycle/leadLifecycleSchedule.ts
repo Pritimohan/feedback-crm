@@ -44,10 +44,10 @@ export function scheduleInitialFollowupNextCalendarDay(anchorDate: Date): Date {
   return scheduled;
 }
 
-const FITTY_INTERESTED_NEXT_FOLLOWUP_DAYS = 3;
+const INTERESTED_NEXT_FOLLOWUP_DAYS = 3;
 
 function getFittyNextFollowupOffsetDays(_currentFollowupNumber: number): number {
-  return FITTY_INTERESTED_NEXT_FOLLOWUP_DAYS;
+  return INTERESTED_NEXT_FOLLOWUP_DAYS;
 }
 
 export function scheduleNextFollowupFromConnected(params: {
@@ -58,7 +58,7 @@ export function scheduleNextFollowupFromConnected(params: {
   const { referenceDate, brand, currentFollowupNumber } = params;
   const scheduled = new Date(referenceDate);
   const offsetDays =
-    brand === 'fitty' && typeof currentFollowupNumber === 'number'
+    (brand === 'fitty' || brand === 'fitelo') && typeof currentFollowupNumber === 'number'
       ? getFittyNextFollowupOffsetDays(currentFollowupNumber)
       : DEFAULT_LEAD_LIFECYCLE_TEMPLATE.nextFollowupOffsetDays;
   scheduled.setDate(scheduled.getDate() + offsetDays);

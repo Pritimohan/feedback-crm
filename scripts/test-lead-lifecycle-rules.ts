@@ -92,12 +92,12 @@ function run() {
   });
   assert.equal(fittyStage2Next.getTime(), new Date('2026-01-04T10:00:00.000Z').getTime());
 
-  const nonFittyNext = scheduleNextFollowupFromConnected({
+  const fiteloStage0Next = scheduleNextFollowupFromConnected({
     referenceDate: now,
     brand: 'fitelo',
     currentFollowupNumber: 0,
   });
-  assert.equal(nonFittyNext.getTime(), new Date('2026-01-02T10:00:00.000Z').getTime());
+  assert.equal(fiteloStage0Next.getTime(), new Date('2026-01-04T10:00:00.000Z').getTime());
 
   const busyTerminal = computeNonConnectedTransition({
     outcome: 'busy',
