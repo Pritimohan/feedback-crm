@@ -5,6 +5,7 @@ import {
   scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
 } from '../lib/lifecycle/leadLifecycleSchedule';
+import { shouldAdvanceIssueWithProduct } from '../lib/services/leadLifecycleEngine';
 import {
   canChooseInterested,
   computeConnectedTransition,
@@ -92,12 +93,12 @@ function run() {
   });
   assert.equal(fittyStage2Next.getTime(), new Date('2026-01-04T10:00:00.000Z').getTime());
 
-  const nonFittyNext = scheduleNextFollowupFromConnected({
+  const fiteloStage0Next = scheduleNextFollowupFromConnected({
     referenceDate: now,
     brand: 'fitelo',
     currentFollowupNumber: 0,
   });
-  assert.equal(nonFittyNext.getTime(), new Date('2026-01-02T10:00:00.000Z').getTime());
+  assert.equal(fiteloStage0Next.getTime(), new Date('2026-01-04T10:00:00.000Z').getTime());
 
   const busyTerminal = computeNonConnectedTransition({
     outcome: 'busy',
@@ -147,6 +148,24 @@ function run() {
     payload: { issue_description: 'Delayed delivery and wrong taste' },
   });
   assert.equal(validIssuePayloadValidation.valid, true);
+
+  const issueFirstTimeAdvances = shouldAdvanceIssueWithProduct({
+    hasIssueAdvancedOnce: false,
+    followupNumber: 1,
+  });
+  assert.equal(issueFirstTimeAdvances, true);
+
+  const issueSecondTimeCloses = shouldAdvanceIssueWithProduct({
+    hasIssueAdvancedOnce: true,
+    followupNumber: 2,
+  });
+  assert.equal(issueSecondTimeCloses, false);
+
+  const issueAtFinalStageCloses = shouldAdvanceIssueWithProduct({
+    hasIssueAdvancedOnce: false,
+    followupNumber: 3,
+  });
+  assert.equal(issueAtFinalStageCloses, false);
 
   console.log('Lead lifecycle rules tests passed.');
 }

@@ -46,6 +46,14 @@ function endOfDay(date: Date): Date {
   return d;
 }
 
+export function shouldAdvanceIssueWithProduct(params: {
+  hasIssueAdvancedOnce: boolean;
+  followupNumber: number;
+}): boolean {
+  const { hasIssueAdvancedOnce, followupNumber } = params;
+  return !hasIssueAdvancedOnce && followupNumber < MAX_FOLLOWUP_NUMBER;
+}
+
 export async function createLifecycleForLead(params: {
   leadId: string;
   anchorDate: Date;
@@ -334,6 +342,22 @@ export async function recordConnectedOutcome(params: {
   }
 
   return db.transaction(async (tx) => {
+    const hasIssueAdvancedOnce =
+      choice === 'issue_with_product'
+        ? (
+            await tx
+              .select({ id: leadLifecycleFollowups.id })
+              .from(leadLifecycleFollowups)
+              .where(
+                and(
+                  eq(leadLifecycleFollowups.lifecycle_id, row.lifecycle.id),
+                  sql<boolean>`${leadLifecycleFollowups.payload} ->> 'issue_advanced_once' = 'true'`
+                )
+              )
+              .limit(1)
+          ).length > 0
+        : false;
+
     const [attempt] = await tx
       .insert(leadLifecycleFollowupAttempts)
       .values({
@@ -377,6 +401,7 @@ export async function recordConnectedOutcome(params: {
       interested_remark: payload.interested_remark ?? null,
       dont_reviewed_remark: payload.dont_reviewed_remark ?? null,
       escalated: choice === 'issue_with_product',
+      issue_advanced_once: choice === 'issue_with_product' ? !hasIssueAdvancedOnce : null,
       objective: getCallObjective(row.lead.lead_type, row.followup.followup_number),
     };
 
@@ -393,7 +418,15 @@ export async function recordConnectedOutcome(params: {
       })
       .where(eq(leadLifecycleFollowups.id, followupId));
 
-    const transition = computeConnectedTransition(choice);
+    const baseTransition = computeConnectedTransition(choice);
+    const transition =
+      choice === 'issue_with_product' &&
+      shouldAdvanceIssueWithProduct({
+        hasIssueAdvancedOnce,
+        followupNumber: row.followup.followup_number,
+      })
+        ? { nextActivityStatus: 'active' as const, advanceStage: true }
+        : baseTransition;
     const nextFollowupNumber = transition.advanceStage
       ? Math.min(row.followup.followup_number + 1, MAX_FOLLOWUP_NUMBER)
       : row.followup.followup_number;
