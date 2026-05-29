@@ -11,11 +11,12 @@ import {
   users,
 } from '@/lib/db/schema';
 import { and, eq, gt, gte, lt, lte, or, isNotNull, isNull, sql } from 'drizzle-orm';
-import type { AnalyticsData } from '@/types/analytics';
+import type { AnalyticsData, AnalyticsSection, ConversionBreakdown } from '@/types/analytics';
 import {
   getAnalyticsDateRange,
   type AnalyticsFilterType,
 } from '@/lib/utils/analyticsDates';
+import { parseConversionBreakdownRows } from '@/lib/utils/analyticsOutcomes';
 
 export async function GET(request: NextRequest) {
   try {
@@ -80,6 +81,43 @@ export async function GET(request: NextRequest) {
       eq(users.role, 'dt'),
       eq(users.active_status, true)
     );
+
+    const brandCond =
+      brand === 'fitelo'
+        ? sql`AND l.brand = 'fitelo'`
+        : sql`AND (l.brand = 'fitty' OR l.brand IS NULL)`;
+
+    async function getStageConversions(followupNumber: number): Promise<{
+      converted: number;
+      conversionBreakdown: ConversionBreakdown;
+    }> {
+      const conversionResult = await db.execute(sql`
+        SELECT
+          lf.payload->>'connected_choice' AS choice,
+          COUNT(DISTINCT l.id)::int AS cnt
+        FROM lead_lifecycle_followups lf
+        INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
+        INNER JOIN leads l ON ol.lead_id = l.id
+        INNER JOIN users u ON l.assigned_dt_id = u.id
+        WHERE lf.followup_number = ${followupNumber}
+          AND lf.status = 'connected'
+          AND lf.connected_date IS NOT NULL
+          AND lf.connected_date >= ${startIso}::timestamp
+          AND lf.connected_date <= ${endIso}::timestamp
+          AND l.assigned_dt_id IS NOT NULL
+          AND u.role = 'dt'
+          ${brandCond}
+        GROUP BY lf.payload->>'connected_choice'
+      `);
+
+      const rows = Array.isArray(conversionResult)
+        ? conversionResult
+        : (conversionResult as { rows?: unknown[] })?.rows ?? [];
+      const conversionBreakdown = parseConversionBreakdownRows(
+        rows as { choice?: string | null; cnt?: number }[]
+      );
+      return { converted: conversionBreakdown.reviewed, conversionBreakdown };
+    }
 
     async function getFollowupAnalytics(followupNumber: number) {
       const leadsResult = await db
@@ -334,12 +372,39 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const [counselling, firstFollowup, secondFollowup, thirdFollowup] = await Promise.all([
+    const [
+      counsellingBase,
+      firstFollowupBase,
+      secondFollowupBase,
+      thirdFollowupBase,
+      counsellingConv,
+      firstFollowupConv,
+      secondFollowupConv,
+      thirdFollowupConv,
+    ] = await Promise.all([
       getFollowupAnalytics(0),
       getFollowupAnalytics(1),
       getFollowupAnalytics(2),
       getFollowupAnalytics(3),
+      getStageConversions(0),
+      getStageConversions(1),
+      getStageConversions(2),
+      getStageConversions(3),
     ]);
+
+    const mergeSection = (
+      base: Omit<AnalyticsSection, 'converted' | 'conversionBreakdown'>,
+      conv: { converted: number; conversionBreakdown: ConversionBreakdown }
+    ): AnalyticsSection => ({
+      ...base,
+      converted: conv.converted,
+      conversionBreakdown: conv.conversionBreakdown,
+    });
+
+    const counselling = mergeSection(counsellingBase, counsellingConv);
+    const firstFollowup = mergeSection(firstFollowupBase, firstFollowupConv);
+    const secondFollowup = mergeSection(secondFollowupBase, secondFollowupConv);
+    const thirdFollowup = mergeSection(thirdFollowupBase, thirdFollowupConv);
 
     const activityWhere = and(
       eq(leadLifecycles.status, 'active'),
@@ -412,11 +477,77 @@ export async function GET(request: NextRequest) {
       uniqueLeadsTouched: uniqueLeadsTouchedResult[0]?.count ?? 0,
     };
 
+    const [distinctLeadsResult, distinctReviewedResult] = await Promise.all([
+      db.execute(sql`
+        SELECT COUNT(DISTINCT l.id)::int AS cnt
+        FROM lead_lifecycle_followups lf
+        INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
+        INNER JOIN leads l ON ol.lead_id = l.id
+        INNER JOIN users u ON l.assigned_dt_id = u.id
+        WHERE ol.status = 'active'
+          AND l.activity_status = 'active'
+          AND l.assigned_dt_id IS NOT NULL
+          AND u.role = 'dt'
+          AND u.active_status = true
+          ${brandCond}
+          AND (
+            (lf.attempt_count = 0 AND lf.scheduled_date >= ${startIso}::timestamp AND lf.scheduled_date <= ${endIso}::timestamp)
+            OR (lf.attempt_count > 0 AND lf.first_attempt_date IS NOT NULL
+                AND lf.first_attempt_date >= ${startIso}::timestamp AND lf.first_attempt_date <= ${endIso}::timestamp)
+            OR (lf.attempt_count > 0 AND EXISTS (
+              SELECT 1 FROM lead_lifecycle_followup_attempts fa
+              WHERE fa.followup_id = lf.id
+                AND fa.attempt_date >= ${startIso}::timestamp
+                AND fa.attempt_date <= ${endIso}::timestamp
+            ))
+          )
+      `),
+      db.execute(sql`
+        SELECT COUNT(DISTINCT l.id)::int AS cnt
+        FROM lead_lifecycle_followups lf
+        INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
+        INNER JOIN leads l ON ol.lead_id = l.id
+        INNER JOIN users u ON l.assigned_dt_id = u.id
+        WHERE lf.status = 'connected'
+          AND lf.connected_date IS NOT NULL
+          AND lf.connected_date >= ${startIso}::timestamp
+          AND lf.connected_date <= ${endIso}::timestamp
+          AND lf.payload->>'connected_choice' = 'reviewed'
+          AND l.assigned_dt_id IS NOT NULL
+          AND u.role = 'dt'
+          ${brandCond}
+      `),
+    ]);
+
+    const distinctLeadsRows = Array.isArray(distinctLeadsResult)
+      ? distinctLeadsResult
+      : (distinctLeadsResult as { rows?: unknown[] })?.rows ?? [];
+    const distinctReviewedRows = Array.isArray(distinctReviewedResult)
+      ? distinctReviewedResult
+      : (distinctReviewedResult as { rows?: unknown[] })?.rows ?? [];
+
+    const totalLeadsDistinct = Number(
+      (distinctLeadsRows[0] as { cnt?: number } | undefined)?.cnt ?? 0
+    );
+    const convertedDistinct = Number(
+      (distinctReviewedRows[0] as { cnt?: number } | undefined)?.cnt ?? 0
+    );
+
+    const funnelSummary = {
+      totalLeads: totalLeadsDistinct,
+      newLeads: counselling.leadBreakdown?.freshLead ?? 0,
+      rescheduledLeads: counselling.leadBreakdown?.rescheduledLead ?? 0,
+      attempted: activity.uniqueCustomersCalled,
+      connected: activity.uniqueCustomersConnected,
+      converted: convertedDistinct,
+    };
+
     const analyticsData: AnalyticsData = {
       counselling,
       firstFollowup,
       secondFollowup,
       thirdFollowup,
+      funnelSummary,
       activity,
       dateRange: {
         startDate: startDate.toISOString().split('T')[0],

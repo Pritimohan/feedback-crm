@@ -7,7 +7,8 @@ interface StageTypeCardProps {
   obj: string;
   att: number;
   conn: number;
-  sale: number;
+  /** Reviewed count (conversion). */
+  conversion: number;
   color: string;
 }
 
@@ -16,11 +17,11 @@ export function StageTypeCard({
   obj,
   att,
   conn,
-  sale,
+  conversion,
   color,
 }: StageTypeCardProps) {
   const connPct = att > 0 ? Math.round((conn / att) * 100) : 0;
-  const salePct = conn > 0 && sale > 0 ? Math.round((sale / conn) * 100) : 0;
+  const convPct = conn > 0 ? Math.round((conversion / conn) * 100) : 0;
 
   return (
     <div
@@ -42,11 +43,13 @@ export function StageTypeCard({
         <span style={{ color: 'var(--text2)' }}>
           Conn: <strong style={{ color: 'var(--text)' }}>{conn}</strong> ({connPct}%)
         </span>
-        {sale > 0 && (
-          <span style={{ color: 'var(--text2)' }}>
-            Sales: <strong style={{ color }}>{sale} ({salePct}%)</strong>
-          </span>
-        )}
+        <span style={{ color: 'var(--text2)' }}>
+          Conversion:{' '}
+          <strong style={{ color }}>
+            {conversion}
+            {conn > 0 ? ` (${convPct}%)` : ''}
+          </strong>
+        </span>
       </div>
     </div>
   );
