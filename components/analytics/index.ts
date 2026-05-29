@@ -11,6 +11,7 @@ export { StageComparisonChart } from './StageComparisonChart';
 export { ConnectedByDietitianChart } from './ConnectedByDietitianChart';
 export { ConnectionVsTtcChart } from './ConnectionVsTtcChart';
 export { DietitianAttemptsDrawer } from './DietitianAttemptsDrawer';
+export { AgentReviewedDrawer } from './AgentReviewedDrawer';
 export { OutcomesBarChart } from './OutcomesBarChart';
 export { AttemptOutcomesChart } from './AttemptOutcomesChart';
 export { AgentReviewedChart } from './AgentReviewedChart';

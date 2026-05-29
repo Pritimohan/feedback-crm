@@ -3,7 +3,7 @@ import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 export type LeadType = 'nps' | 'review';
 export type LeadActivityStatus = 'active' | 'inactive' | 'deferred';
 export type NonConnectedOutcome = 'busy' | 'wrong_number' | 'not_interested' | 'no_answer';
-export type ConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'dont_reviewed';
+export type ConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'didnt_reviewed';
 export type TouchStatus =
   | 'pending'
   | 'busy'
@@ -14,7 +14,7 @@ export type TouchStatus =
   | 'connected';
 
 export const NON_CONNECTED_OUTCOMES: NonConnectedOutcome[] = ['busy', 'wrong_number', 'not_interested', 'no_answer'];
-export const CONNECTED_CHOICES: ConnectedChoice[] = ['reviewed', 'issue_with_product', 'interested', 'dont_reviewed'];
+export const CONNECTED_CHOICES: ConnectedChoice[] = ['reviewed', 'issue_with_product', 'interested', 'didnt_reviewed'];
 
 export function isNonConnectedOutcome(value: string): value is NonConnectedOutcome {
   return NON_CONNECTED_OUTCOMES.includes(value as NonConnectedOutcome);
@@ -30,7 +30,7 @@ export function canChooseInterested(followupNumber: number): boolean {
 
 export function getConnectedChoicesForStage(followupNumber: number): ConnectedChoice[] {
   if (followupNumber >= MAX_FOLLOWUP_NUMBER) {
-    return ['reviewed', 'issue_with_product', 'dont_reviewed'];
+    return ['reviewed', 'issue_with_product', 'didnt_reviewed'];
   }
 
   return ['reviewed', 'issue_with_product', 'interested'];
@@ -42,7 +42,7 @@ export interface ConnectedChoicePayload {
   is_testimonial?: boolean;
   issue_description?: string;
   interested_remark?: string;
-  dont_reviewed_remark?: string;
+  didnt_reviewed_remark?: string;
 }
 
 export function validateConnectedChoicePayload(params: {
@@ -108,7 +108,7 @@ export function computeConnectedTransition(choice: ConnectedChoice): ConnectedTr
       return { nextActivityStatus: 'active', advanceStage: true };
     case 'reviewed':
     case 'issue_with_product':
-    case 'dont_reviewed':
+    case 'didnt_reviewed':
       return { nextActivityStatus: 'inactive', advanceStage: false };
     default:
       return { nextActivityStatus: 'inactive', advanceStage: false };

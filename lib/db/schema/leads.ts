@@ -9,7 +9,7 @@ export const connectedChoiceEnum = pgEnum('lead_connected_choice', [
   'reviewed',
   'issue_with_product',
   'interested',
-  'dont_reviewed',
+  'didnt_reviewed',
 ]);
 export const leadBrandEnum = pgEnum('lead_brand', ['fitty', 'fitelo']);
 

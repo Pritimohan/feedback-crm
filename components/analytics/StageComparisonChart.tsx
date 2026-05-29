@@ -11,20 +11,36 @@ import {
   Tooltip,
 } from 'recharts';
 
-interface StageData {
+export interface StageComparisonRow {
   name: string;
   attempted: number;
   connected: number;
-  converted: number;
+  reviewed: number;
+  issue_with_product: number;
+  interested: number;
+  didnt_reviewed: number;
 }
 
 interface StageComparisonChartProps {
-  data: StageData[];
+  data: StageComparisonRow[];
 }
+
+const SERIES_META: {
+  key: keyof Omit<StageComparisonRow, 'name'>;
+  label: string;
+  fill: string;
+}[] = [
+  { key: 'attempted', label: 'Attempted', fill: 'rgba(29,72,56,.18)' },
+  { key: 'connected', label: 'Connected', fill: '#1D4838' },
+  { key: 'reviewed', label: 'Reviewed', fill: '#D5F369' },
+  { key: 'issue_with_product', label: 'Issue', fill: '#FCB92D' },
+  { key: 'interested', label: 'Interested', fill: '#134175' },
+  { key: 'didnt_reviewed', label: "Didn't review", fill: '#E7580B' },
+];
 
 export function StageComparisonChart({ data }: StageComparisonChartProps) {
   return (
-    <div className="h-[200px] w-full">
+    <div className="h-[240px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,.04)" />
@@ -35,34 +51,67 @@ export function StageComparisonChart({ data }: StageComparisonChartProps) {
           />
           <YAxis
             tick={{ fontSize: 10, fill: '#888' }}
+            allowDecimals={false}
             tickLine={false}
             axisLine={false}
           />
           <Tooltip
-            contentStyle={{
-              borderRadius: 8,
-              border: '1px solid var(--border2)',
-              fontSize: 12,
+            cursor={{ fill: 'rgba(29, 72, 56, 0.06)' }}
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload as StageComparisonRow | undefined;
+              return (
+                <div
+                  style={{
+                    borderRadius: 8,
+                    border: '1px solid var(--border2)',
+                    background: '#ffffff',
+                    padding: '10px 12px',
+                    fontSize: 12,
+                    boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+                    maxWidth: 280,
+                  }}
+                >
+                  <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#1D4838' }}>
+                    {row?.name ?? label}
+                  </p>
+                  {SERIES_META.map((series) => (
+                    <p
+                      key={series.key}
+                      style={{
+                        margin: '4px 0 0',
+                        color: '#1a1a1a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 2,
+                          background: series.fill,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span style={{ fontWeight: 600, color: '#1D4838' }}>{series.label}:</span>
+                      <span>{row?.[series.key] ?? 0}</span>
+                    </p>
+                  ))}
+                </div>
+              );
             }}
           />
-          <Bar
-            dataKey="attempted"
-            fill="rgba(29,72,56,.18)"
-            radius={[3, 3, 0, 0]}
-            name="Attempted"
-          />
-          <Bar
-            dataKey="connected"
-            fill="#1D4838"
-            radius={[3, 3, 0, 0]}
-            name="Connected"
-          />
-          <Bar
-            dataKey="converted"
-            fill="#D5F369"
-            radius={[3, 3, 0, 0]}
-            name="Converted"
-          />
+          {SERIES_META.map((series) => (
+            <Bar
+              key={series.key}
+              dataKey={series.key}
+              fill={series.fill}
+              radius={[3, 3, 0, 0]}
+              name={series.label}
+            />
+          ))}
         </BarChart>
       </ResponsiveContainer>
     </div>

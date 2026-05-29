@@ -18,7 +18,7 @@ export interface ConversionBreakdown {
   reviewed: number;
   issue_with_product: number;
   interested: number;
-  dont_reviewed: number;
+  didnt_reviewed: number;
 }
 
 export interface AnalyticsSection {
@@ -130,6 +130,17 @@ export interface TransactionRow {
   connected: boolean;
   outcome: string;
   timeToCall: string;
+}
+
+/** Reviewed conversion attributed to the agent's connected attempt. */
+export interface AgentReviewedRow {
+  attemptId: string;
+  leadId: string;
+  customerName: string;
+  phone: string;
+  stage: string;
+  connectedAt: string;
+  attemptAt: string;
 }
 
 export interface PipelineAnalytics {
