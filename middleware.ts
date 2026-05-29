@@ -10,6 +10,7 @@ export async function middleware(request: NextRequest) {
     '/api/auth',
     '/api/health',
     '/api/webhooks',
+    '/api/cron',
     '/api/customers/warranty',
     '/api/customers/dietplan',
   ];

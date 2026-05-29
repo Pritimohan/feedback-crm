@@ -18,6 +18,7 @@
     "redistribute-leads": "tsx scripts/redistribute-leads-round-robin.ts",
     "redistribute-leads:apply": "tsx scripts/redistribute-leads-round-robin.ts --execute",
     "test:rebalance": "tsx lib/rebalance/run-rebalance-tests.ts",
+    "dry-run:nightly-redistribute-stage0": "tsx scripts/dry-run-nightly-redistribute-stage0.ts",
     "test:followup-priority": "tsx lib/dt/run-feedback-priority-tests.ts"
   },
   "dependencies": {
