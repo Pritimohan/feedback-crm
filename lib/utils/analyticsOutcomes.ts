@@ -62,7 +62,7 @@ export function formatConnectedChoiceForDisplay(choice: string | null | undefine
   if (c === 'reviewed') return 'Reviewed';
   if (c === 'issue_with_product') return 'Issue with product';
   if (c === 'interested') return 'Interested';
-  if (c === 'dont_reviewed') return "Don't reviewed";
+  if (c === 'didnt_reviewed' || c === 'dont_reviewed') return "Didn't review";
   return choice?.replace(/_/g, ' ') || '—';
 }
 
@@ -70,7 +70,7 @@ export const CONNECTED_CHOICE_KEYS = [
   'reviewed',
   'issue_with_product',
   'interested',
-  'dont_reviewed',
+  'didnt_reviewed',
 ] as const;
 
 export function emptyConversionBreakdown(): ConversionBreakdown {
@@ -78,7 +78,7 @@ export function emptyConversionBreakdown(): ConversionBreakdown {
     reviewed: 0,
     issue_with_product: 0,
     interested: 0,
-    dont_reviewed: 0,
+    didnt_reviewed: 0,
   };
 }
 
@@ -92,7 +92,8 @@ export function parseConversionBreakdownRows(
     if (choice === 'reviewed') breakdown.reviewed = cnt;
     else if (choice === 'issue_with_product') breakdown.issue_with_product = cnt;
     else if (choice === 'interested') breakdown.interested = cnt;
-    else if (choice === 'dont_reviewed') breakdown.dont_reviewed = cnt;
+    else if (choice === 'didnt_reviewed' || choice === 'dont_reviewed')
+      breakdown.didnt_reviewed += cnt;
   }
   return breakdown;
 }

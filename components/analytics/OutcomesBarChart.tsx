@@ -17,7 +17,7 @@ const CHOICE_COLORS: Record<string, string> = {
   reviewed: '#D5F369',
   issue_with_product: '#FCB92D',
   interested: '#134175',
-  dont_reviewed: '#E7580B',
+  didnt_reviewed: '#E7580B',
 };
 
 interface OutcomesBarChartProps {

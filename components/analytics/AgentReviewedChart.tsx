@@ -65,14 +65,36 @@ export function AgentReviewedChart({
             axisLine={false}
           />
           <Tooltip
-            formatter={(v: number | string, _name: string, props: { payload?: { conversionPct?: number } }) => {
-              const pct = props?.payload?.conversionPct ?? 0;
-              return [`${v} reviewed (${pct}% conv.)`, 'Reviewed'];
-            }}
-            contentStyle={{
-              borderRadius: 8,
-              border: '1px solid var(--border2)',
-              fontSize: 12,
+            cursor={{ fill: 'rgba(29, 72, 56, 0.06)' }}
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const row = payload[0]?.payload as {
+                reviewed?: number;
+                conversionPct?: number;
+                dtName?: string;
+              };
+              const count = row?.reviewed ?? payload[0]?.value ?? 0;
+              const pct = row?.conversionPct ?? 0;
+              return (
+                <div
+                  style={{
+                    borderRadius: 8,
+                    border: '1px solid var(--border2)',
+                    background: '#ffffff',
+                    padding: '10px 12px',
+                    fontSize: 12,
+                    boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+                  }}
+                >
+                  <p style={{ margin: 0, fontWeight: 600, color: '#1D4838' }}>
+                    {row?.dtName ?? label}
+                  </p>
+                  <p style={{ margin: '6px 0 0', color: '#1a1a1a' }}>
+                    <span style={{ fontWeight: 600, color: '#1D4838' }}>Reviewed:</span>{' '}
+                    {count} ({pct}% conv.)
+                  </p>
+                </div>
+              );
             }}
           />
           <Bar

@@ -123,10 +123,13 @@ export async function GET(request: NextRequest) {
           (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND LOWER(a.outcome) = 'connected') AS connected,
           (SELECT COUNT(DISTINCT l.id)::int
            FROM lead_lifecycle_followups lf
+           INNER JOIN lead_lifecycle_followup_attempts fa
+             ON fa.followup_id = lf.id
+             AND fa.dt_id = u.id
+             AND LOWER(fa.outcome) = 'connected'
            INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
            INNER JOIN leads l ON ol.lead_id = l.id
-           WHERE l.assigned_dt_id = u.id
-             AND lf.status = 'connected'
+           WHERE lf.status = 'connected'
              AND lf.connected_date IS NOT NULL
              AND lf.connected_date >= ${startStr}::timestamp
              AND lf.connected_date <= ${endStr}::timestamp

@@ -7,7 +7,7 @@ import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 type PrimaryMode = 'connected' | 'no_answer';
 type QuickOutcome = 'busy' | 'wrong_number' | 'not_interested' | 'no_answer';
-type ConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'dont_reviewed';
+type ConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'didnt_reviewed';
 
 export interface ReviewLeadModalData {
   followupId: string;
@@ -35,7 +35,7 @@ const CONNECTED_LABELS: Record<ConnectedChoice, string> = {
   reviewed: 'Reviewed',
   issue_with_product: 'Issue with product',
   interested: 'Interested',
-  dont_reviewed: "Didn't Review",
+  didnt_reviewed: "Didn't Review",
 };
 
 export function DTReviewLeadModal({
@@ -106,7 +106,7 @@ export function DTReviewLeadModal({
             is_testimonial: isTestimonial,
             issue_description: issueDescription || undefined,
             interested_remark: interestedRemark || undefined,
-            dont_reviewed_remark: dontReviewedRemark || undefined,
+            didnt_reviewed_remark: dontReviewedRemark || undefined,
           },
           notes || undefined
         );
@@ -209,7 +209,7 @@ export function DTReviewLeadModal({
               </Form.Item>
             ) : null}
 
-            {connectedChoice === 'dont_reviewed' ? (
+            {connectedChoice === 'didnt_reviewed' ? (
               <Form.Item label="Remarks (optional)">
                 <Input.TextArea rows={3} value={dontReviewedRemark} onChange={(e) => setDontReviewedRemark(e.target.value)} />
               </Form.Item>

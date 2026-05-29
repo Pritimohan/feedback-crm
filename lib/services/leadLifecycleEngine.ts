@@ -399,7 +399,7 @@ export async function recordConnectedOutcome(params: {
       is_testimonial: payload.is_testimonial ?? false,
       issue_description: payload.issue_description ?? null,
       interested_remark: payload.interested_remark ?? null,
-      dont_reviewed_remark: payload.dont_reviewed_remark ?? null,
+      didnt_reviewed_remark: payload.didnt_reviewed_remark ?? null,
       escalated: choice === 'issue_with_product',
       issue_advanced_once: choice === 'issue_with_product' ? !hasIssueAdvancedOnce : null,
       objective: getCallObjective(row.lead.lead_type, row.followup.followup_number),

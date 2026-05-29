@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
 import type {
+  AgentReviewedRow,
   AnalyticsData,
   AnalyticsFilterType,
   DietitianAnalyticsRow,
@@ -20,11 +21,10 @@ import {
   DietitianTable,
   AgentReviewedChart,
   ConnectionVsTtcChart,
-  DietitianAttemptsDrawer,
+  AgentReviewedDrawer,
   OutcomesBarChart,
   AttemptOutcomesChart,
 } from '@/components/analytics';
-import type { DietitianAttemptRow } from '@/components/analytics/DietitianAttemptsDrawer';
 import './analytics-page.css';
 import { followupStageLabel } from '@/lib/utils/analyticsStageLabels';
 
@@ -42,13 +42,13 @@ export default function AnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
 
-  const [selectedDietitian, setSelectedDietitian] = useState<{
+  const [selectedAgent, setSelectedAgent] = useState<{
     dtId: string;
     dtName: string;
   } | null>(null);
-  const [dtAttemptsOpen, setDtAttemptsOpen] = useState(false);
-  const [dtAttemptsLoading, setDtAttemptsLoading] = useState(false);
-  const [dtAttempts, setDtAttempts] = useState<DietitianAttemptRow[]>([]);
+  const [reviewedDrawerOpen, setReviewedDrawerOpen] = useState(false);
+  const [reviewedLoading, setReviewedLoading] = useState(false);
+  const [reviewedRows, setReviewedRows] = useState<AgentReviewedRow[]>([]);
 
   const dateRangeLabel =
     filterType === 'custom' && customDateRange
@@ -196,14 +196,14 @@ export default function AnalyticsPage() {
     fetchAnalytics();
   }, [fetchAnalytics]);
 
-  const fetchDietitianAttempts = useCallback(
+  const fetchAgentReviewed = useCallback(
     async (dt: { dtId: string; dtName: string }) => {
       if (filterType === 'custom' && !customDateRange) return;
       try {
-        setSelectedDietitian(dt);
-        setDtAttemptsOpen(true);
-        setDtAttemptsLoading(true);
-        setDtAttempts([]);
+        setSelectedAgent(dt);
+        setReviewedDrawerOpen(true);
+        setReviewedLoading(true);
+        setReviewedRows([]);
 
         const params = new URLSearchParams();
         params.set('filter', filterType);
@@ -212,15 +212,15 @@ export default function AnalyticsPage() {
           params.set('endDate', customDateRange[1]);
         }
 
-        const res = await fetch(`/api/admin/analytics/dietitians/${dt.dtId}/attempts?${params}`);
-        if (!res.ok) throw new Error('Failed to fetch attempts');
-        const json = (await res.json()) as { attempts?: DietitianAttemptRow[] };
-        setDtAttempts(Array.isArray(json.attempts) ? json.attempts : []);
+        const res = await fetch(`/api/admin/analytics/dietitians/${dt.dtId}/reviewed?${params}`);
+        if (!res.ok) throw new Error('Failed to fetch reviewed conversions');
+        const json = (await res.json()) as { reviewed?: AgentReviewedRow[] };
+        setReviewedRows(Array.isArray(json.reviewed) ? json.reviewed : []);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to fetch attempts';
+        const msg = err instanceof Error ? err.message : 'Failed to fetch reviewed conversions';
         messageApi.error(msg);
       } finally {
-        setDtAttemptsLoading(false);
+        setReviewedLoading(false);
       }
     },
     [filterType, customDateRange, messageApi]
@@ -385,31 +385,23 @@ export default function AnalyticsPage() {
     }),
   ];
 
+  const mapStageComparison = (section: typeof c) => {
+    const breakdown = section?.conversionBreakdown;
+    return {
+      attempted: section?.attempted ?? 0,
+      connected: section?.connected ?? 0,
+      reviewed: breakdown?.reviewed ?? section?.converted ?? 0,
+      issue_with_product: breakdown?.issue_with_product ?? 0,
+      interested: breakdown?.interested ?? 0,
+      didnt_reviewed: breakdown?.didnt_reviewed ?? 0,
+    };
+  };
+
   const stageComparisonData = [
-    {
-      name: followupStageLabel(0),
-      attempted: c?.attempted ?? 0,
-      connected: c?.connected ?? 0,
-      converted: c?.converted ?? 0,
-    },
-    {
-      name: followupStageLabel(1),
-      attempted: f1?.attempted ?? 0,
-      connected: f1?.connected ?? 0,
-      converted: f1?.converted ?? 0,
-    },
-    {
-      name: followupStageLabel(2),
-      attempted: f2?.attempted ?? 0,
-      connected: f2?.connected ?? 0,
-      converted: f2?.converted ?? 0,
-    },
-    {
-      name: followupStageLabel(3),
-      attempted: f3?.attempted ?? 0,
-      connected: f3?.connected ?? 0,
-      converted: f3?.converted ?? 0,
-    },
+    { name: followupStageLabel(0), ...mapStageComparison(c) },
+    { name: followupStageLabel(1), ...mapStageComparison(f1) },
+    { name: followupStageLabel(2), ...mapStageComparison(f2) },
+    { name: followupStageLabel(3), ...mapStageComparison(f3) },
   ];
 
   const avgConnPct =
@@ -569,14 +561,6 @@ export default function AnalyticsPage() {
               />
             ))}
           </div>
-          <div className="analytics-card mb-4">
-            <div className="analytics-card-title">
-              Stage comparison — attempted vs. connected vs. reviewed
-            </div>
-            <div className="h-[200px]">
-              <StageComparisonChart data={stageComparisonData} />
-            </div>
-          </div>
           <div className="analytics-footer-label">Call-level activity — individual attempts</div>
           <div className="analytics-table-wrap">
             <TransactionTable transactions={transactions} />
@@ -598,13 +582,19 @@ export default function AnalyticsPage() {
               <AttemptOutcomesChart data={outcomesData?.byAttemptOutcome ?? []} />
             </div>
           </div>
+          <div className="analytics-card mt-4">
+            <div className="analytics-card-title">
+              Stage comparison — attempted, connected & outcomes
+            </div>
+            <StageComparisonChart data={stageComparisonData} />
+          </div>
           <div
             className="analytics-card mt-4 text-[11px] leading-relaxed"
             style={{ color: 'var(--text2)' }}
           >
             <strong style={{ color: 'var(--fg)' }}>Reviewed</strong> is the conversion KPI — a
             connected call where the customer completed a review. Other connected choices (issue,
-            interested, don&apos;t reviewed) are shown for context but do not count toward
+            interested, didn&apos;t review) are shown for context but do not count toward
             conversion.
           </div>
         </div>
@@ -633,8 +623,8 @@ export default function AnalyticsPage() {
               <div className="analytics-card-title">Reviewed by agent</div>
               <AgentReviewedChart
                 agents={dietitianData}
-                selectedDtId={selectedDietitian?.dtId ?? null}
-                onSelectAgent={fetchDietitianAttempts}
+                selectedDtId={selectedAgent?.dtId ?? null}
+                onSelectAgent={fetchAgentReviewed}
               />
             </div>
             <div className="analytics-card">
@@ -651,16 +641,16 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      <DietitianAttemptsDrawer
-        open={dtAttemptsOpen}
+      <AgentReviewedDrawer
+        open={reviewedDrawerOpen}
         onClose={() => {
-          setDtAttemptsOpen(false);
-          setSelectedDietitian(null);
-          setDtAttempts([]);
+          setReviewedDrawerOpen(false);
+          setSelectedAgent(null);
+          setReviewedRows([]);
         }}
-        dietitian={selectedDietitian}
-        attempts={dtAttempts}
-        loading={dtAttemptsLoading}
+        agent={selectedAgent}
+        reviewed={reviewedRows}
+        loading={reviewedLoading}
         filterType={filterType}
         customDateRange={customDateRange}
         dateRangeLabel={dateRangeLabel}

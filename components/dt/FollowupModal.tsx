@@ -50,7 +50,7 @@ function renderPreviousInteractionContent(remarks: string | null, payload: unkno
   addTextRow('review_remark', 'Review Remark', payloadObj?.review_remark);
   addTextRow('issue_description', 'Issue Description', payloadObj?.issue_description);
   addTextRow('interested_remark', 'Interested Remark', payloadObj?.interested_remark);
-  addTextRow('dont_reviewed_remark', "Didn't Review Remark", payloadObj?.dont_reviewed_remark);
+  addTextRow('didnt_reviewed_remark', "Didn't Review Remark", payloadObj?.didnt_reviewed_remark);
 
   const screenshotUrl = typeof payloadObj?.review_screenshot_url === 'string' ? payloadObj.review_screenshot_url.trim() : '';
   if (screenshotUrl) {
@@ -67,7 +67,7 @@ function renderPreviousInteractionContent(remarks: string | null, payload: unkno
   return <div style={{ lineHeight: 1.6 }}>{rows}</div>;
 }
 
-type ConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'dont_reviewed';
+type ConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'didnt_reviewed';
 
 interface Props {
   followupId: string | null;
@@ -282,7 +282,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         is_testimonial: isTestimonial,
         issue_description: issueDescription || undefined,
         interested_remark: interestedRemark || undefined,
-        dont_reviewed_remark: dontReviewedRemark || undefined,
+        didnt_reviewed_remark: dontReviewedRemark || undefined,
       };
       const res = await fetch(`/api/dt/followups/${followupId}/connected`, {
         method: 'POST',
@@ -351,7 +351,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       ? [
           { label: 'Reviewed', value: 'reviewed' },
           { label: 'Issue with product', value: 'issue_with_product' },
-          { label: "Didn't Review", value: 'dont_reviewed' },
+          { label: "Didn't Review", value: 'didnt_reviewed' },
         ]
       : [
           { label: 'Reviewed', value: 'reviewed' },
@@ -569,7 +569,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
                 />
               ) : null}
 
-              {connectedChoice === 'dont_reviewed' ? (
+              {connectedChoice === 'didnt_reviewed' ? (
                 <Input.TextArea
                   placeholder="Remarks (optional)"
                   rows={3}

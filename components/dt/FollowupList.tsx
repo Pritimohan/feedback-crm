@@ -29,7 +29,7 @@ interface FollowupRow {
     phone: string;
   };
   objective: string;
-  available_connected_choices: ('reviewed' | 'issue_with_product' | 'interested' | 'dont_reviewed')[];
+  available_connected_choices: ('reviewed' | 'issue_with_product' | 'interested' | 'didnt_reviewed')[];
 }
 
 interface ActiveResponse {
