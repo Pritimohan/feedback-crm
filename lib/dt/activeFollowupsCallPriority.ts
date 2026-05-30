@@ -1,3 +1,4 @@
+import { isFiveHourRetryFollowup } from '@/lib/lifecycle/fiveHourRetryFollowup';
 import { getAnalyticsDayBoundsForInstant } from '@/lib/utils/analyticsDates';
 
 /** Minimal row shape for feedback DT active follow-up sorting. */
@@ -7,6 +8,8 @@ export interface FeedbackActiveFollowupRow {
     scheduled_date: Date | string;
     followup_number: number;
     attempt_count: number;
+    updated_at?: Date | string | null;
+    payload?: unknown;
   };
   /** Set by API so client re-sort keeps todayDue before overdue (no IST re-bucket drift). */
   _sortQueue?: 'today' | 'overdue';
@@ -35,6 +38,56 @@ function followupNumber(row: FeedbackActiveFollowupRow): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Scheduled time has arrived (or passed). */
+export function isFollowupDueForCall(
+  row: FeedbackActiveFollowupRow,
+  now: Date = new Date()
+): boolean {
+  const t = scheduledMs(row);
+  return t > 0 && t <= now.getTime();
+}
+
+/**
+ * Today's (IST) +5h retry not yet at scheduled time — hidden from Active Follow-ups until due.
+ */
+export function shouldHideFutureFiveHourRetry(
+  row: FeedbackActiveFollowupRow,
+  now: Date = new Date(),
+  dayBounds?: FeedbackFollowupDayBounds
+): boolean {
+  const { dayStart, dayEnd } = dayBounds ?? getTodayBoundsForFeedbackFollowups(now);
+  return (
+    isFiveHourRetryFollowup(row.followup) &&
+    isScheduledTodayIst(row, dayStart, dayEnd) &&
+    scheduledMs(row) > now.getTime()
+  );
+}
+
+export function filterVisibleActiveFollowups<T extends FeedbackActiveFollowupRow>(
+  items: T[],
+  now: Date = new Date(),
+  dayBounds?: FeedbackFollowupDayBounds
+): T[] {
+  return items.filter((row) => !shouldHideFutureFiveHourRetry(row, now, dayBounds));
+}
+
+/**
+ * Today's (IST) +5h busy/no-answer retry whose scheduled time has arrived.
+ * Overdue from prior days are excluded.
+ */
+export function isDueFiveHourRetryFollowup(
+  row: FeedbackActiveFollowupRow,
+  now: Date = new Date(),
+  dayBounds?: FeedbackFollowupDayBounds
+): boolean {
+  const { dayStart, dayEnd } = dayBounds ?? getTodayBoundsForFeedbackFollowups(now);
+  return (
+    isFiveHourRetryFollowup(row.followup) &&
+    isFollowupDueForCall(row, now) &&
+    isScheduledTodayIst(row, dayStart, dayEnd)
+  );
+}
+
 export function isScheduledTodayIst(
   row: FeedbackActiveFollowupRow,
   dayStart: Date,
@@ -48,6 +101,14 @@ function queueRank(row: FeedbackActiveFollowupRow, dayStart: Date, dayEnd: Date)
   if (row._sortQueue === 'today') return 0;
   if (row._sortQueue === 'overdue') return 1;
   return isScheduledTodayIst(row, dayStart, dayEnd) ? 0 : 1;
+}
+
+/** Due-now band: longest-waiting (earliest schedule) first, then standard tie-breakers. */
+function compareDueCallsNow<T extends FeedbackActiveFollowupRow>(a: T, b: T): number {
+  const ta = scheduledMs(a);
+  const tb = scheduledMs(b);
+  if (ta !== tb) return ta - tb;
+  return compareFeedbackCallsWithinQueue(a, b);
 }
 
 /** Within-queue compare: attempt → follow-up stage → schedule time → id (same for today and overdue). */
@@ -80,17 +141,32 @@ export function sortFeedbackCallBucket<T extends FeedbackActiveFollowupRow>(
     .map((row) => ({ ...row, _sortQueue: queue }));
 }
 
-/** Build full list: all IST-today rows first, then overdue; each band sorted by attempt → stage → recency. */
+/**
+ * Build full list: due +5h retries on top, then IST-today, then overdue.
+ * Future +5h retries stay in normal order until scheduled time (then top + blink in UI).
+ */
 export function buildSortedActiveFollowupCalls<T extends FeedbackActiveFollowupRow>(
   todayDue: T[],
   overdue: T[],
-  _now?: Date
+  now: Date = new Date()
 ): T[] {
-  void _now;
-  return [
+  const queued = [
     ...sortFeedbackCallBucket(todayDue, 'today'),
     ...sortFeedbackCallBucket(overdue, 'overdue'),
   ];
+
+  const dueFiveHour: T[] = [];
+  const rest: T[] = [];
+  for (const row of queued) {
+    if (isDueFiveHourRetryFollowup(row, now)) {
+      dueFiveHour.push(row);
+    } else {
+      rest.push(row);
+    }
+  }
+
+  dueFiveHour.sort(compareDueCallsNow);
+  return [...dueFiveHour, ...rest];
 }
 
 /**

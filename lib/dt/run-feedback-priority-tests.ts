@@ -5,8 +5,12 @@ import assert from 'node:assert/strict';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import { PENDING_RETRY_SCHEDULE_5H } from '../lifecycle/fiveHourRetryFollowup';
 import {
   buildSortedActiveFollowupCalls,
+  filterVisibleActiveFollowups,
+  isDueFiveHourRetryFollowup,
+  shouldHideFutureFiveHourRetry,
   sortFeedbackActiveFollowupCalls,
   sortFeedbackCallBucket,
   type FeedbackActiveFollowupRow,
@@ -25,7 +29,8 @@ function row(
   id: string,
   fn: number,
   scheduled: string,
-  attempts: number
+  attempts: number,
+  extras?: { payload?: Record<string, unknown>; updated_at?: string }
 ): FeedbackActiveFollowupRow {
   return {
     followup: {
@@ -33,8 +38,20 @@ function row(
       followup_number: fn,
       scheduled_date: scheduled,
       attempt_count: attempts,
+      ...extras,
     },
   };
+}
+
+function row5h(
+  id: string,
+  scheduled: string,
+  updatedAt: string
+): FeedbackActiveFollowupRow {
+  return row(id, 0, scheduled, 1, {
+    updated_at: updatedAt,
+    payload: { pending_retry_schedule: PENDING_RETRY_SCHEDULE_5H },
+  });
 }
 
 // Today bucket: first call before followup 1 (even if FU1 is more recent)
@@ -87,6 +104,33 @@ function row(
   assert.deepEqual(
     s.map((x) => x.followup.id),
     ['firstToday', 'fu1Today', 'firstOverdue']
+  );
+}
+
+// Due +5h retry scheduled today on top; future today 5h hidden; prior-day 5h excluded from highlight
+{
+  const retryDue = row5h('retryDue', '2026-05-13T06:00:00.000Z', '2026-05-13T01:00:00.000Z');
+  const retryLater = row5h('retryLater', '2026-05-13T08:30:00.000Z', '2026-05-13T03:30:00.000Z');
+  const retryYesterday = row5h('retryYesterday', '2026-05-12T06:00:00.000Z', '2026-05-12T01:00:00.000Z');
+  const firstToday = row('firstToday', 0, '2026-05-13T04:00:00.000Z', 0);
+  assert.equal(isDueFiveHourRetryFollowup(retryDue, refNow, bounds), true);
+  assert.equal(isDueFiveHourRetryFollowup(retryLater, refNow, bounds), false);
+  assert.equal(isDueFiveHourRetryFollowup(retryYesterday, refNow, bounds), false);
+  assert.equal(shouldHideFutureFiveHourRetry(retryLater, refNow, bounds), true);
+  assert.equal(shouldHideFutureFiveHourRetry(retryDue, refNow, bounds), false);
+  const visible = filterVisibleActiveFollowups(
+    [firstToday, retryLater, retryDue, retryYesterday],
+    refNow,
+    bounds
+  );
+  assert.deepEqual(
+    visible.map((x) => x.followup.id),
+    ['firstToday', 'retryDue', 'retryYesterday']
+  );
+  const s = buildSortedActiveFollowupCalls(visible, [], refNow);
+  assert.deepEqual(
+    s.map((x) => x.followup.id),
+    ['retryDue', 'firstToday', 'retryYesterday']
   );
 }
 

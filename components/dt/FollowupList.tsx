@@ -5,7 +5,11 @@ import { Card, Empty, Select, Space, Tag, Typography } from 'antd';
 import { ClockCircleOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import { sortFeedbackActiveFollowupCalls } from '@/lib/dt/activeFollowupsCallPriority';
+import {
+  filterVisibleActiveFollowups,
+  isDueFiveHourRetryFollowup,
+  sortFeedbackActiveFollowupCalls,
+} from '@/lib/dt/activeFollowupsCallPriority';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 dayjs.extend(relativeTime);
@@ -18,6 +22,8 @@ interface FollowupRow {
     followup_number: number;
     scheduled_date: string;
     attempt_count: number;
+    updated_at?: string | null;
+    payload?: unknown;
   };
   lead: {
     id: string;
@@ -73,7 +79,7 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
     return () => clearInterval(timer);
   }, []);
 
@@ -94,7 +100,9 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
               }
             : undefined;
         setDayBounds(bounds);
-        setCalls(sortFeedbackActiveFollowupCalls(raw, { dayBounds: bounds }));
+        setCalls(
+          sortFeedbackActiveFollowupCalls(raw, { dayBounds: bounds, now: new Date() })
+        );
       } catch {
         setCalls([]);
       } finally {
@@ -121,7 +129,8 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
   };
 
   const filteredSortedCalls = useMemo(() => {
-    const byFollowup = filterByFollowupNumber(calls);
+    const visible = filterVisibleActiveFollowups(calls, currentTime, dayBounds);
+    const byFollowup = filterByFollowupNumber(visible);
     const filtered = filterByAttemptCount(byFollowup);
     return sortFeedbackActiveFollowupCalls(filtered, {
       now: currentTime,
@@ -142,7 +151,10 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
     return <Tag color={color}>{followupUiLabel(followupNumber)}</Tag>;
   };
 
-  const renderFollowupItem = (item: FollowupRow) => (
+  const renderFollowupItem = (item: FollowupRow) => {
+    const showFiveHourRetryBlink = isDueFiveHourRetryFollowup(item, currentTime, dayBounds);
+
+    return (
     <div
       key={item.followup.id}
       onClick={() => onFollowupClick(item)}
@@ -155,9 +167,16 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
     >
       <Space orientation="vertical" style={{ width: '100%' }}>
         <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Space>
+          <Space align="center" size={8}>
             <UserOutlined />
             <Text strong>{item.customer.name}</Text>
+            {showFiveHourRetryBlink ? (
+              <span
+                className="followup-five-hour-retry-dot"
+                aria-hidden
+                title="5-hour retry due"
+              />
+            ) : null}
           </Space>
           {getFollowupBadge(item.followup.followup_number)}
         </Space>
@@ -176,7 +195,8 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
         </Text>
       </Space>
     </div>
-  );
+    );
+  };
 
   if (loading) {
     return <Card loading />;
