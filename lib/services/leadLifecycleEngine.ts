@@ -27,9 +27,12 @@ import {
   scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
 } from '@/lib/lifecycle/leadLifecycleSchedule';
+import { mergeFollowupPayloadForFiveHourRetry } from '@/lib/lifecycle/fiveHourRetryFollowup';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
+import { MAX_ATTEMPTS_PER_DAY } from '@/lib/utils/lifecycleConstants';
 import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 import {
+  filterVisibleActiveFollowups,
   getTodayBoundsForFeedbackFollowups,
   splitFeedbackFollowupsByIstDay,
 } from '@/lib/dt/activeFollowupsCallPriority';
@@ -250,12 +253,20 @@ export async function recordFollowupAttemptOutcome(params: {
     };
 
     if (!transition.terminal && (outcome === 'busy' || outcome === 'no_answer')) {
-      followupUpdates.scheduled_date = computeRetrySchedule({
+      const attemptsToday = Number(count);
+      const nextScheduled = computeRetrySchedule({
         now,
-        attemptsToday: Number(count),
+        attemptsToday,
         brand: row.lead.brand,
       });
+      followupUpdates.scheduled_date = nextScheduled;
       followupUpdates.status = 'pending';
+      if (attemptsToday < MAX_ATTEMPTS_PER_DAY) {
+        followupUpdates.payload = mergeFollowupPayloadForFiveHourRetry(
+          row.followup.payload,
+          nextScheduled
+        );
+      }
     }
 
     await tx.update(leadLifecycleFollowups).set(followupUpdates).where(eq(leadLifecycleFollowups.id, followupId));
@@ -503,7 +514,8 @@ export async function recordConnectedOutcome(params: {
 /** Pending follow-ups for a DT through end of today (IST): today's due + overdue. Matches admin call-distribution totals. */
 export async function getActiveFollowupsForDt(dtId: string, date: Date = new Date(), brand: CrmBrand = 'fitty') {
   const now = date;
-  const { dayEnd } = getTodayBoundsForFeedbackFollowups(now);
+  const dayBounds = getTodayBoundsForFeedbackFollowups(now);
+  const { dayEnd } = dayBounds;
 
   const rows = await db
     .select({
@@ -532,11 +544,12 @@ export async function getActiveFollowupsForDt(dtId: string, date: Date = new Dat
     available_connected_choices: getConnectedChoicesForStage(r.followup.followup_number),
   }));
 
-  const { todayDue, overdue } = splitFeedbackFollowupsByIstDay(enriched, now);
+  const visible = filterVisibleActiveFollowups(enriched, now, dayBounds);
+  const { todayDue, overdue } = splitFeedbackFollowupsByIstDay(visible, now);
 
   return {
     overdue,
     todayDue,
-    total: rows.length,
+    total: visible.length,
   };
 }
