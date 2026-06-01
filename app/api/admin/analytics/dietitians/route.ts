@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { sql } from 'drizzle-orm';
 import {
+  ANALYTICS_TIMEZONE,
   getAnalyticsDateRange,
   type AnalyticsFilterType,
 } from '@/lib/utils/analyticsDates';
@@ -87,17 +88,35 @@ export async function GET(request: NextRequest) {
         SELECT
           fa.dt_id,
           fa.outcome,
+          fa.attempt_date,
           lp.followup_number,
           lp.assigned_dt_id,
           lp.first_attempt_date,
           lp.scheduled_date,
-          l.id AS lead_id
+          l.id AS lead_id,
+          l.customer_id,
+          date_trunc('day', fa.attempt_date AT TIME ZONE ${ANALYTICS_TIMEZONE}) AS attempt_day_ist
         FROM lead_lifecycle_followup_attempts fa
         INNER JOIN lead_pool lp ON fa.followup_id = lp.followup_id
         INNER JOIN lead_lifecycle_followups lf ON lf.id = lp.followup_id
         INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
         INNER JOIN leads l ON ol.lead_id = l.id
         WHERE fa.attempt_date >= ${startStr}::timestamp AND fa.attempt_date <= ${endStr}::timestamp
+      ),
+      connected_dt_days AS (
+        SELECT DISTINCT dt_id, customer_id, attempt_day_ist
+        FROM attempts_in_range
+        WHERE LOWER(TRIM(outcome)) = 'connected'
+      ),
+      attempts_deduped AS (
+        SELECT DISTINCT ON (a.dt_id, a.lead_id, a.attempt_day_ist)
+          a.dt_id,
+          a.lead_id,
+          a.attempt_day_ist,
+          a.outcome,
+          a.followup_number
+        FROM attempts_in_range a
+        ORDER BY a.dt_id, a.lead_id, a.attempt_day_ist, a.attempt_date DESC
       ),
       dt_stats AS (
         SELECT
@@ -119,8 +138,8 @@ export async function GET(request: NextRequest) {
                   AND lp_new.attempt_count = 0
               )
           ) AS rescheduled_leads,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id) AS attempted,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND LOWER(a.outcome) = 'connected') AS connected,
+          (SELECT COUNT(DISTINCT (a.customer_id, a.attempt_day_ist))::int FROM attempts_in_range a WHERE a.dt_id = u.id) AS attempted,
+          (SELECT COUNT(*)::int FROM connected_dt_days c WHERE c.dt_id = u.id) AS connected,
           (SELECT COUNT(DISTINCT l.id)::int
            FROM lead_lifecycle_followups lf
            INNER JOIN lead_lifecycle_followup_attempts fa
@@ -136,14 +155,38 @@ export async function GET(request: NextRequest) {
              AND lf.payload->>'connected_choice' = 'reviewed'
              ${leadBrandCond}
           ) AS reviewed,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND LOWER(a.outcome) = 'connected' AND a.followup_number = 0) AS counselling,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 1 AND LOWER(a.outcome) = 'connected') AS fu1_conn,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 1) AS fu1_att,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 2 AND LOWER(a.outcome) = 'connected') AS fu2_conn,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 2) AS fu2_att,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 3 AND LOWER(a.outcome) = 'connected') AS fu3_conn,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 3) AS fu3_att,
-          (SELECT COUNT(DISTINCT a.lead_id)::int FROM attempts_in_range a WHERE a.dt_id = u.id AND LOWER(a.outcome) IN ('cnr','no_answer','wrong_number','failed','unreachable','not_interested')) AS unreachable_count,
+          (SELECT COUNT(*)::int FROM (
+            SELECT a.lead_id, a.attempt_day_ist FROM attempts_in_range a
+            WHERE a.dt_id = u.id AND a.followup_number = 0
+            GROUP BY a.lead_id, a.attempt_day_ist
+            HAVING BOOL_OR(LOWER(TRIM(a.outcome)) = 'connected')
+          ) counselling_days) AS counselling,
+          (SELECT COUNT(DISTINCT (a.lead_id, a.attempt_day_ist))::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 0) AS fu0_att,
+          (SELECT COUNT(*)::int FROM (
+            SELECT a.lead_id, a.attempt_day_ist FROM attempts_in_range a
+            WHERE a.dt_id = u.id AND a.followup_number = 1
+            GROUP BY a.lead_id, a.attempt_day_ist
+            HAVING BOOL_OR(LOWER(TRIM(a.outcome)) = 'connected')
+          ) fu1_conn_days) AS fu1_conn,
+          (SELECT COUNT(DISTINCT (a.lead_id, a.attempt_day_ist))::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 1) AS fu1_att,
+          (SELECT COUNT(*)::int FROM (
+            SELECT a.lead_id, a.attempt_day_ist FROM attempts_in_range a
+            WHERE a.dt_id = u.id AND a.followup_number = 2
+            GROUP BY a.lead_id, a.attempt_day_ist
+            HAVING BOOL_OR(LOWER(TRIM(a.outcome)) = 'connected')
+          ) fu2_conn_days) AS fu2_conn,
+          (SELECT COUNT(DISTINCT (a.lead_id, a.attempt_day_ist))::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 2) AS fu2_att,
+          (SELECT COUNT(*)::int FROM (
+            SELECT a.lead_id, a.attempt_day_ist FROM attempts_in_range a
+            WHERE a.dt_id = u.id AND a.followup_number = 3
+            GROUP BY a.lead_id, a.attempt_day_ist
+            HAVING BOOL_OR(LOWER(TRIM(a.outcome)) = 'connected')
+          ) fu3_conn_days) AS fu3_conn,
+          (SELECT COUNT(DISTINCT (a.lead_id, a.attempt_day_ist))::int FROM attempts_in_range a WHERE a.dt_id = u.id AND a.followup_number = 3) AS fu3_att,
+          (SELECT COUNT(*)::int FROM attempts_deduped ad
+            WHERE ad.dt_id = u.id
+              AND LOWER(TRIM(ad.outcome)) IN ('cnr','no_answer','wrong_number','failed','unreachable','not_interested')
+          ) AS unreachable_count,
           (SELECT AVG(EXTRACT(EPOCH FROM (lp.first_attempt_date - lp.scheduled_date))/3600)
            FROM lead_pool lp
            WHERE lp.assigned_dt_id = u.id AND lp.first_attempt_date IS NOT NULL) AS ttc_avg
@@ -178,9 +221,14 @@ export async function GET(request: NextRequest) {
         attempted,
         connected,
         reviewed,
+        attemptPct:
+          Number(row.leads ?? 0) > 0
+            ? Math.round((attempted / Number(row.leads ?? 0)) * 100)
+            : 0,
         connPct: attempted > 0 ? Math.round((connected / attempted) * 100) : 0,
         conversionPct: connected > 0 ? Math.round((reviewed / connected) * 100) : 0,
         counselling: Number(row.counselling ?? 0),
+        fu0Att: Number(row.fu0_att ?? 0),
         fu1Conn: Number(row.fu1_conn ?? 0),
         fu1Att: Number(row.fu1_att ?? 0),
         fu2Conn,
@@ -212,9 +260,11 @@ export async function GET(request: NextRequest) {
           attempted: 0,
           connected: 0,
           reviewed: 0,
+          attemptPct: 0,
           connPct: 0,
           conversionPct: 0,
           counselling: 0,
+          fu0Att: 0,
           fu1Conn: 0,
           fu1Att: 0,
           fu2Conn: 0,

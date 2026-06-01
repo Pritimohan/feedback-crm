@@ -27,6 +27,7 @@ import {
 } from '@/components/analytics';
 import './analytics-page.css';
 import { followupStageLabel } from '@/lib/utils/analyticsStageLabels';
+import { sumConversionBreakdown } from '@/lib/utils/analyticsOutcomes';
 
 type TabKey = 'overview' | 'outcomes' | 'agents';
 
@@ -159,6 +160,8 @@ export default function AnalyticsPage() {
             useSnapshotAttempts && w?.callsAttempted != null ? w.callsAttempted : d.attempted;
           const connected =
             useSnapshotAttempts && w?.callsConnected != null ? w.callsConnected : d.connected;
+          const leads = d.leads ?? 0;
+          const attemptPct = leads > 0 ? Math.round((attempted / leads) * 100) : d.attemptPct;
           const connPct = attempted > 0 ? Math.round((connected / attempted) * 100) : d.connPct;
           const conversionPct =
             connected > 0 ? Math.round((d.reviewed / connected) * 100) : d.conversionPct;
@@ -177,6 +180,7 @@ export default function AnalyticsPage() {
             overdueAttempted: useSnapshotData ? (w?.overdueAttempted ?? 0) : 0,
             attempted,
             connected,
+            attemptPct,
             connPct,
             conversionPct,
           };
@@ -236,7 +240,7 @@ export default function AnalyticsPage() {
   const uniqueAttempted = funnel?.attempted ?? analyticsData?.activity?.uniqueCustomersCalled ?? 0;
   const uniqueConnected = funnel?.connected ?? analyticsData?.activity?.uniqueCustomersConnected ?? 0;
   const totalConverted = funnel?.converted ?? 0;
-  const uniqueLeadsTouched = analyticsData?.activity?.uniqueLeadsTouched ?? 0;
+  const totalAttempts = analyticsData?.activity?.attempts ?? 0;
 
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 
@@ -250,13 +254,13 @@ export default function AnalyticsPage() {
     {
       label: 'Attempted',
       value: uniqueAttempted,
-      subtitle: `${pct(uniqueAttempted, totalLeads || 1)}% of leads`,
+      subtitle: `unique customers called (once per day) · ${pct(uniqueAttempted, totalLeads || 1)}% of leads`,
       dot: '#FCB92D',
     },
     {
       label: 'Connected',
       value: uniqueConnected,
-      subtitle: `${pct(uniqueConnected, uniqueAttempted || 1)}% of attempted`,
+      subtitle: `unique customer-days with a connect · ${pct(uniqueConnected, uniqueAttempted || 1)}% of attempted`,
       dot: '#1D4838',
     },
     {
@@ -266,13 +270,15 @@ export default function AnalyticsPage() {
       dot: '#134175',
     },
     {
-      label: 'Leads touched',
-      value: uniqueLeadsTouched,
-      subtitle: analyticsData?.dateRange
-        ? `${analyticsData.dateRange.startDate} to ${analyticsData.dateRange.endDate}`
-        : filterType === 'custom' && customDateRange
-          ? `${customDateRange[0]} to ${customDateRange[1]}`
-          : `this ${filterType}`,
+      label: 'Total Lead touched',
+      value: totalAttempts,
+      subtitle: `total call attempts · ${
+        analyticsData?.dateRange
+          ? `${analyticsData.dateRange.startDate} to ${analyticsData.dateRange.endDate}`
+          : filterType === 'custom' && customDateRange
+            ? `${customDateRange[0]} to ${customDateRange[1]}`
+            : `this ${filterType}`
+      }`,
       dot: '#88CEEB',
     },
   ];
@@ -387,13 +393,15 @@ export default function AnalyticsPage() {
 
   const mapStageComparison = (section: typeof c) => {
     const breakdown = section?.conversionBreakdown;
+    const connectedFromOutcomes = sumConversionBreakdown(breakdown);
     return {
       attempted: section?.attempted ?? 0,
-      connected: section?.connected ?? 0,
-      reviewed: breakdown?.reviewed ?? section?.converted ?? 0,
+      connected: connectedFromOutcomes || (section?.connected ?? 0),
+      reviewed: breakdown?.reviewed ?? 0,
       issue_with_product: breakdown?.issue_with_product ?? 0,
       interested: breakdown?.interested ?? 0,
       didnt_reviewed: breakdown?.didnt_reviewed ?? 0,
+      unknown: breakdown?.unknown ?? 0,
     };
   };
 

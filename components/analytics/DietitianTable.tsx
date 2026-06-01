@@ -118,11 +118,14 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
             </th>
             <th
               className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
-              title="Unique customers called in selected date range"
+              title="Unique customer-days (IST): one count per customer per calendar day in range"
             >
               Attempts
             </th>
-            <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Customer-days where any call that day was connected"
+            >
               Connected
             </th>
             <th
@@ -131,7 +134,16 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
             >
               Reviewed
             </th>
-            <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Attempted customer-days ÷ leads in pool for the selected period"
+            >
+              Att.%
+            </th>
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Connected ÷ attempted"
+            >
               Conn.%
             </th>
             <th
@@ -140,16 +152,28 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
             >
               Conv.%
             </th>
-            <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Connected / attempted (unique lead-days) at this follow-up stage"
+            >
               {followupStageLabel(0)}
             </th>
-            <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Connected / attempted (unique lead-days) at this follow-up stage"
+            >
               {followupStageLabel(1)}
             </th>
-            <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Connected / attempted (unique lead-days) at this follow-up stage"
+            >
               {followupStageLabel(2)}
             </th>
-            <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Connected / attempted (unique lead-days) at this follow-up stage"
+            >
               {followupStageLabel(3)}
             </th>
             <th className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55">
@@ -183,6 +207,12 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
               <td className="px-3 py-2">{d.reviewed}</td>
               <td className="px-3 py-2">
                 <BadgePill
+                  value={`${d.attemptPct}%`}
+                  variant={d.attemptPct >= 70 ? 'green' : d.attemptPct >= 40 ? 'amber' : 'red'}
+                />
+              </td>
+              <td className="px-3 py-2">
+                <BadgePill
                   value={`${d.connPct}%`}
                   variant={d.connPct >= 75 ? 'green' : d.connPct >= 55 ? 'amber' : 'red'}
                 />
@@ -193,7 +223,9 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
                   variant={d.conversionPct >= 40 ? 'green' : d.conversionPct >= 20 ? 'amber' : 'red'}
                 />
               </td>
-              <td className="px-3 py-2">{d.counselling}</td>
+              <td className="px-3 py-2">
+                {d.counselling}/<span style={{ color: 'var(--text3)' }}>{d.fu0Att}</span>
+              </td>
               <td className="px-3 py-2">
                 {d.fu1Conn}/<span style={{ color: 'var(--text3)' }}>{d.fu1Att}</span>
               </td>

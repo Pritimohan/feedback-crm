@@ -199,8 +199,8 @@ export async function GET(request: NextRequest) {
     const attemptRows = await db
       .select({
         dtId: leadLifecycleFollowupAttempts.dt_id,
-        callsAttempted: sql<number>`cast(count(*) as int)`,
-        callsConnected: sql<number>`cast(sum(case when ${leadLifecycleFollowupAttempts.outcome} = ${'connected'} then 1 else 0 end) as int)`,
+        callsAttempted: sql<number>`cast(count(distinct ${leads.customer_id}) as int)`,
+        callsConnected: sql<number>`cast(count(distinct case when lower(trim(${leadLifecycleFollowupAttempts.outcome})) = 'connected' then ${leads.customer_id} end) as int)`,
       })
       .from(leadLifecycleFollowupAttempts)
       .innerJoin(
