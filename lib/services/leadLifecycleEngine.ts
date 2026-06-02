@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, eq, lte, sql } from 'drizzle-orm';
 import { db, type FeedbackDbTransaction } from '@/lib/db';
 import {
   callLogs,
@@ -27,9 +27,7 @@ import {
   scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
 } from '@/lib/lifecycle/leadLifecycleSchedule';
-import { mergeFollowupPayloadForFiveHourRetry } from '@/lib/lifecycle/fiveHourRetryFollowup';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
-import { MAX_ATTEMPTS_PER_DAY } from '@/lib/utils/lifecycleConstants';
 import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 import {
   filterVisibleActiveFollowups,
@@ -226,17 +224,6 @@ export async function recordFollowupAttemptOutcome(params: {
       updated_at: now,
     });
 
-    const [{ count }] = await tx
-      .select({ count: sql<number>`count(*)` })
-      .from(leadLifecycleFollowupAttempts)
-      .where(
-        and(
-          eq(leadLifecycleFollowupAttempts.followup_id, followupId),
-          gte(leadLifecycleFollowupAttempts.attempt_date, dayStart),
-          lte(leadLifecycleFollowupAttempts.attempt_date, dayEnd)
-        )
-      );
-
     const attemptCountAfter = row.followup.attempt_count + 1;
     const transition = computeNonConnectedTransition({
       outcome,
@@ -253,20 +240,11 @@ export async function recordFollowupAttemptOutcome(params: {
     };
 
     if (!transition.terminal && (outcome === 'busy' || outcome === 'no_answer')) {
-      const attemptsToday = Number(count);
       const nextScheduled = computeRetrySchedule({
         now,
-        attemptsToday,
-        brand: row.lead.brand,
       });
       followupUpdates.scheduled_date = nextScheduled;
       followupUpdates.status = 'pending';
-      if (attemptsToday < MAX_ATTEMPTS_PER_DAY) {
-        followupUpdates.payload = mergeFollowupPayloadForFiveHourRetry(
-          row.followup.payload,
-          nextScheduled
-        );
-      }
     }
 
     await tx.update(leadLifecycleFollowups).set(followupUpdates).where(eq(leadLifecycleFollowups.id, followupId));

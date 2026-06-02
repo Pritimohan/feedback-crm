@@ -1,4 +1,3 @@
-import { isFiveHourRetryFollowup } from '@/lib/lifecycle/fiveHourRetryFollowup';
 import { getAnalyticsDayBoundsForInstant } from '@/lib/utils/analyticsDates';
 
 /** Minimal row shape for feedback DT active follow-up sorting. */
@@ -38,54 +37,12 @@ function followupNumber(row: FeedbackActiveFollowupRow): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Scheduled time has arrived (or passed). */
-export function isFollowupDueForCall(
-  row: FeedbackActiveFollowupRow,
-  now: Date = new Date()
-): boolean {
-  const t = scheduledMs(row);
-  return t > 0 && t <= now.getTime();
-}
-
-/**
- * Today's (IST) +5h retry not yet at scheduled time — hidden from Active Follow-ups until due.
- */
-export function shouldHideFutureFiveHourRetry(
-  row: FeedbackActiveFollowupRow,
-  now: Date = new Date(),
-  dayBounds?: FeedbackFollowupDayBounds
-): boolean {
-  const { dayStart, dayEnd } = dayBounds ?? getTodayBoundsForFeedbackFollowups(now);
-  return (
-    isFiveHourRetryFollowup(row.followup) &&
-    isScheduledTodayIst(row, dayStart, dayEnd) &&
-    scheduledMs(row) > now.getTime()
-  );
-}
-
 export function filterVisibleActiveFollowups<T extends FeedbackActiveFollowupRow>(
   items: T[],
-  now: Date = new Date(),
-  dayBounds?: FeedbackFollowupDayBounds
+  _now: Date = new Date(),
+  _dayBounds?: FeedbackFollowupDayBounds
 ): T[] {
-  return items.filter((row) => !shouldHideFutureFiveHourRetry(row, now, dayBounds));
-}
-
-/**
- * Today's (IST) +5h busy/no-answer retry whose scheduled time has arrived.
- * Overdue from prior days are excluded.
- */
-export function isDueFiveHourRetryFollowup(
-  row: FeedbackActiveFollowupRow,
-  now: Date = new Date(),
-  dayBounds?: FeedbackFollowupDayBounds
-): boolean {
-  const { dayStart, dayEnd } = dayBounds ?? getTodayBoundsForFeedbackFollowups(now);
-  return (
-    isFiveHourRetryFollowup(row.followup) &&
-    isFollowupDueForCall(row, now) &&
-    isScheduledTodayIst(row, dayStart, dayEnd)
-  );
+  return items;
 }
 
 export function isScheduledTodayIst(
@@ -101,14 +58,6 @@ function queueRank(row: FeedbackActiveFollowupRow, dayStart: Date, dayEnd: Date)
   if (row._sortQueue === 'today') return 0;
   if (row._sortQueue === 'overdue') return 1;
   return isScheduledTodayIst(row, dayStart, dayEnd) ? 0 : 1;
-}
-
-/** Due-now band: longest-waiting (earliest schedule) first, then standard tie-breakers. */
-function compareDueCallsNow<T extends FeedbackActiveFollowupRow>(a: T, b: T): number {
-  const ta = scheduledMs(a);
-  const tb = scheduledMs(b);
-  if (ta !== tb) return ta - tb;
-  return compareFeedbackCallsWithinQueue(a, b);
 }
 
 /** Within-queue compare: attempt → follow-up stage → schedule time → id (same for today and overdue). */
@@ -141,32 +90,16 @@ export function sortFeedbackCallBucket<T extends FeedbackActiveFollowupRow>(
     .map((row) => ({ ...row, _sortQueue: queue }));
 }
 
-/**
- * Build full list: due +5h retries on top, then IST-today, then overdue.
- * Future +5h retries stay in normal order until scheduled time (then top + blink in UI).
- */
+/** Build full list: IST-today, then overdue. */
 export function buildSortedActiveFollowupCalls<T extends FeedbackActiveFollowupRow>(
   todayDue: T[],
   overdue: T[],
-  now: Date = new Date()
+  _now: Date = new Date()
 ): T[] {
-  const queued = [
+  return [
     ...sortFeedbackCallBucket(todayDue, 'today'),
     ...sortFeedbackCallBucket(overdue, 'overdue'),
   ];
-
-  const dueFiveHour: T[] = [];
-  const rest: T[] = [];
-  for (const row of queued) {
-    if (isDueFiveHourRetryFollowup(row, now)) {
-      dueFiveHour.push(row);
-    } else {
-      rest.push(row);
-    }
-  }
-
-  dueFiveHour.sort(compareDueCallsNow);
-  return [...dueFiveHour, ...rest];
 }
 
 /**

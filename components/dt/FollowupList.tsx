@@ -7,7 +7,6 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import {
   filterVisibleActiveFollowups,
-  isDueFiveHourRetryFollowup,
   sortFeedbackActiveFollowupCalls,
 } from '@/lib/dt/activeFollowupsCallPriority';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
@@ -152,8 +151,6 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
   };
 
   const renderFollowupItem = (item: FollowupRow) => {
-    const showFiveHourRetryBlink = isDueFiveHourRetryFollowup(item, currentTime, dayBounds);
-
     return (
     <div
       key={item.followup.id}
@@ -170,13 +167,6 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
           <Space align="center" size={8}>
             <UserOutlined />
             <Text strong>{item.customer.name}</Text>
-            {showFiveHourRetryBlink ? (
-              <span
-                className="followup-five-hour-retry-dot"
-                aria-hidden
-                title="5-hour retry due"
-              />
-            ) : null}
           </Space>
           {getFollowupBadge(item.followup.followup_number)}
         </Space>
