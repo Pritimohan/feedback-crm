@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import {
-  Button, Modal, Table, Tag, Alert, Space, Statistic,
+  App, Button, Modal, Table, Tag, Alert, Space, Statistic,
   Row, Col, Card, InputNumber, Typography, Collapse, Tooltip, message,
 } from 'antd';
 import {
@@ -31,6 +31,7 @@ interface RebalanceCallsWidgetProps {
 }
 
 export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceCallsWidgetProps) {
+  const { modal } = App.useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rebalancing, setRebalancing] = useState(false);
@@ -128,9 +129,34 @@ export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceC
     } catch (error) {
       console.error('Error rebalancing:', error);
       message.error(error instanceof Error ? error.message : 'Failed to rebalance');
+      throw error;
     } finally {
       setRebalancing(false);
     }
+  };
+
+  const requestExecuteRebalance = () => {
+    if (!canExecute || !activeConfig) return;
+    modal.confirm({
+      title: 'Execute rebalance?',
+      okText: 'Yes, rebalance',
+      cancelText: 'Go back',
+      okType: 'primary',
+      centered: true,
+      content: (
+        <Space direction="vertical" size="small">
+          <Text>
+            You are about to redistribute <strong>{totalReassignablePool}</strong> reassignable
+            lead{totalReassignablePool === 1 ? '' : 's'} across agents using your percentage split.
+          </Text>
+          <Text type="secondary">
+            Locked leads ({totalLockedLeads}) will stay with their current agent.
+          </Text>
+          <Text strong>Are you sure you want to proceed?</Text>
+        </Space>
+      ),
+      onOk: () => handleRebalance(),
+    });
   };
 
   const toggleRow = (dtId: string) =>
@@ -141,6 +167,27 @@ export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceC
   const handleClose = () => {
     setIsModalOpen(false);
     setResult(null);
+  };
+
+  const requestClose = () => {
+    if (rebalancing) {
+      modal.confirm({
+        title: 'Rebalance in progress',
+        okText: 'Yes, close',
+        cancelText: 'Keep waiting',
+        okType: 'primary',
+        centered: true,
+        content: (
+          <Text>
+            Reassignment is still running. Closing now will not undo changes already saved to the
+            database. Are you sure you want to close?
+          </Text>
+        ),
+        onOk: handleClose,
+      });
+      return;
+    }
+    handleClose();
   };
 
   const examplePool = totalReassignablePool || 320;
@@ -328,10 +375,11 @@ export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceC
           </Space>
         }
         open={isModalOpen}
-        onCancel={handleClose}
+        onCancel={requestClose}
+        maskClosable={!rebalancing}
         width={980}
         footer={[
-          <Button key="cancel" onClick={handleClose}>
+          <Button key="cancel" onClick={requestClose} disabled={loading}>
             Close
           </Button>,
           <Button
@@ -339,7 +387,7 @@ export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceC
             type="primary"
             icon={<SyncOutlined spin={rebalancing} />}
             loading={rebalancing}
-            onClick={handleRebalance}
+            onClick={requestExecuteRebalance}
             disabled={!canExecute}
           >
             Execute Rebalance

@@ -19,14 +19,20 @@ export interface ConversionBreakdown {
   issue_with_product: number;
   interested: number;
   didnt_reviewed: number;
+  /** Connected in CRM but missing or unrecognized connected_choice. */
+  unknown: number;
 }
 
 export interface AnalyticsSection {
   leads: number;
   leadBreakdown?: LeadBreakdown;
+  /** Unique lead-days (IST): one per lead per calendar day, last attempt wins for disposition splits. */
   attempted: number;
   callAttemptBreakdown: CallAttemptBreakdown;
+  /** CRM connected leads in range (sum of conversionBreakdown). */
   connected: number;
+  /** Unique lead-days with dial outcome connected (not shown in stage comparison). */
+  connectedAttempts?: number;
   connectedBreakdown?: OutcomeBreakdown;
   callLater: number;
   callLaterBreakdown?: OutcomeBreakdown;
@@ -54,11 +60,12 @@ export interface AnalyticsData {
   thirdFollowup: AnalyticsSection;
   funnelSummary: FunnelSummary;
   activity: {
+    /** Raw attempt row count in range (all dials). */
     attempts: number;
+    /** Unique customer-days (IST): max one per customer per calendar day. */
     uniqueCustomersCalled: number;
+    /** Customer-days where any dial that day was connected. */
     uniqueCustomersConnected: number;
-    /** Distinct leads with at least one attempt in range (FeedbackCRM-specific). */
-    uniqueLeadsTouched: number;
   };
   dateRange: {
     startDate: string;
@@ -108,10 +115,14 @@ export interface DietitianAnalyticsRow {
   rescheduledLeads: number;
   attempted: number;
   connected: number;
+  /** Attempted customer-days as % of distinct leads in pool for the period. */
+  attemptPct: number;
   connPct: number;
   reviewed: number;
   conversionPct: number;
+  /** First call (FU0) connected lead-days — use with fu0Att as connected/attempted. */
   counselling: number;
+  fu0Att: number;
   fu1Conn: number;
   fu1Att: number;
   fu2Conn: number;

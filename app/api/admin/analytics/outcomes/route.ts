@@ -16,6 +16,10 @@ import {
   isExcludedAttemptOutcome,
   normalizeAttemptOutcomeForChart,
 } from '@/lib/utils/analyticsOutcomes';
+import {
+  dedupedAttemptsCte,
+  sqlConnectedFollowupFilters,
+} from '@/lib/analytics/uniqueAttemptsSql';
 
 const VALID_FILTERS: AnalyticsFilterType[] = [
   'today',
@@ -39,10 +43,6 @@ export async function GET(request: NextRequest) {
     }
 
     const brand = await getCrmBrandFromCookie();
-    const brandCond =
-      brand === 'fitelo'
-        ? sql`AND l.brand = 'fitelo'`
-        : sql`AND (l.brand = 'fitty' OR l.brand IS NULL)`;
 
     const searchParams = request.nextUrl.searchParams;
     const filterType = (searchParams.get('filter') || 'today') as AnalyticsFilterType;
@@ -66,39 +66,29 @@ export async function GET(request: NextRequest) {
       db.execute(sql`
         SELECT
           lf.payload->>'connected_choice' AS choice,
-          COUNT(DISTINCT l.id)::int AS cnt
+          COUNT(DISTINCT lf.id)::int AS cnt
         FROM lead_lifecycle_followups lf
         INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
         INNER JOIN leads l ON ol.lead_id = l.id
         INNER JOIN users u ON l.assigned_dt_id = u.id
-        WHERE lf.status = 'connected'
-          AND lf.connected_date IS NOT NULL
-          AND lf.connected_date >= ${startStr}::timestamp
-          AND lf.connected_date <= ${endStr}::timestamp
-          AND lf.payload->>'connected_choice' IS NOT NULL
-          AND l.assigned_dt_id IS NOT NULL
-          AND u.role = 'dt'
-          ${brandCond}
+        WHERE ${sqlConnectedFollowupFilters({
+          startIso: startStr,
+          endIso: endStr,
+          brand,
+        })}
         GROUP BY lf.payload->>'connected_choice'
       `),
       db.execute(sql`
-        SELECT
-          LOWER(TRIM(fa.outcome)) AS outcome,
-          COUNT(*)::int AS cnt
-        FROM lead_lifecycle_followup_attempts fa
-        INNER JOIN lead_lifecycle_followups lf ON fa.followup_id = lf.id
-        INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
-        INNER JOIN leads l ON ol.lead_id = l.id
-        INNER JOIN users u ON l.assigned_dt_id = u.id
-        WHERE fa.attempt_date >= ${startStr}::timestamp
-          AND fa.attempt_date <= ${endStr}::timestamp
-          AND ol.status = 'active'
-          AND l.activity_status = 'active'
-          AND l.assigned_dt_id IS NOT NULL
-          AND u.role = 'dt'
-          AND u.active_status = true
-          ${brandCond}
-        GROUP BY LOWER(TRIM(fa.outcome))
+        WITH ${dedupedAttemptsCte({
+          startIso: startStr,
+          endIso: endStr,
+          brand,
+          partition: 'customer',
+          withLeadPoolFilter: false,
+        })}
+        SELECT LOWER(TRIM(outcome)) AS outcome, COUNT(*)::int AS cnt
+        FROM attempts_deduped
+        GROUP BY LOWER(TRIM(outcome))
       `),
     ]);
 

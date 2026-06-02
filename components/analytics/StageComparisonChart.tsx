@@ -19,6 +19,7 @@ export interface StageComparisonRow {
   issue_with_product: number;
   interested: number;
   didnt_reviewed: number;
+  unknown?: number;
 }
 
 interface StageComparisonChartProps {
@@ -29,13 +30,20 @@ const SERIES_META: {
   key: keyof Omit<StageComparisonRow, 'name'>;
   label: string;
   fill: string;
+  description?: string;
 }[] = [
   { key: 'attempted', label: 'Attempted', fill: 'rgba(29,72,56,.18)' },
-  { key: 'connected', label: 'Connected', fill: '#1D4838' },
+  {
+    key: 'connected',
+    label: 'Connected',
+    fill: '#1D4838',
+    description: 'Marked connected in CRM (sum of outcomes below)',
+  },
   { key: 'reviewed', label: 'Reviewed', fill: '#D5F369' },
   { key: 'issue_with_product', label: 'Issue', fill: '#FCB92D' },
   { key: 'interested', label: 'Interested', fill: '#134175' },
   { key: 'didnt_reviewed', label: "Didn't review", fill: '#E7580B' },
+  { key: 'unknown', label: 'Unknown', fill: '#9CA3AF' },
 ];
 
 export function StageComparisonChart({ data }: StageComparisonChartProps) {
@@ -75,7 +83,10 @@ export function StageComparisonChart({ data }: StageComparisonChartProps) {
                   <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#1D4838' }}>
                     {row?.name ?? label}
                   </p>
-                  {SERIES_META.map((series) => (
+                  {SERIES_META.filter((series) => {
+                    if (series.key !== 'unknown') return true;
+                    return (row?.unknown ?? 0) > 0;
+                  }).map((series) => (
                     <p
                       key={series.key}
                       style={{
@@ -85,6 +96,7 @@ export function StageComparisonChart({ data }: StageComparisonChartProps) {
                         alignItems: 'center',
                         gap: 8,
                       }}
+                      title={series.description}
                     >
                       <span
                         style={{
@@ -103,7 +115,7 @@ export function StageComparisonChart({ data }: StageComparisonChartProps) {
               );
             }}
           />
-          {SERIES_META.map((series) => (
+          {SERIES_META.filter((series) => series.key !== 'unknown').map((series) => (
             <Bar
               key={series.key}
               dataKey={series.key}
@@ -112,6 +124,15 @@ export function StageComparisonChart({ data }: StageComparisonChartProps) {
               name={series.label}
             />
           ))}
+          {data.some((row) => (row.unknown ?? 0) > 0) ? (
+            <Bar
+              key="unknown"
+              dataKey="unknown"
+              fill="#9CA3AF"
+              radius={[3, 3, 0, 0]}
+              name="Unknown"
+            />
+          ) : null}
         </BarChart>
       </ResponsiveContainer>
     </div>

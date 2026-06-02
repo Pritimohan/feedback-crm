@@ -7,7 +7,6 @@ import {
   leadLifecycleFollowupAttempts,
   leadLifecycles,
   leads,
-  customers,
   users,
 } from '@/lib/db/schema';
 import { and, eq, gt, gte, lt, lte, or, isNotNull, isNull, sql } from 'drizzle-orm';
@@ -16,7 +15,15 @@ import {
   getAnalyticsDateRange,
   type AnalyticsFilterType,
 } from '@/lib/utils/analyticsDates';
-import { parseConversionBreakdownRows } from '@/lib/utils/analyticsOutcomes';
+import {
+  parseConversionBreakdownRows,
+  sumConversionBreakdown,
+} from '@/lib/utils/analyticsOutcomes';
+import {
+  dedupedAttemptsCte,
+  sqlBrandCond,
+  sqlConnectedFollowupFilters,
+} from '@/lib/analytics/uniqueAttemptsSql';
 
 export async function GET(request: NextRequest) {
   try {
@@ -82,33 +89,41 @@ export async function GET(request: NextRequest) {
       eq(users.active_status, true)
     );
 
-    const brandCond =
-      brand === 'fitelo'
-        ? sql`AND l.brand = 'fitelo'`
-        : sql`AND (l.brand = 'fitty' OR l.brand IS NULL)`;
+    const brandCond = sqlBrandCond(brand);
 
     async function getStageConversions(followupNumber: number): Promise<{
       converted: number;
       conversionBreakdown: ConversionBreakdown;
+      totalConnected: number;
     }> {
-      const conversionResult = await db.execute(sql`
-        SELECT
-          lf.payload->>'connected_choice' AS choice,
-          COUNT(DISTINCT l.id)::int AS cnt
-        FROM lead_lifecycle_followups lf
-        INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
-        INNER JOIN leads l ON ol.lead_id = l.id
-        INNER JOIN users u ON l.assigned_dt_id = u.id
-        WHERE lf.followup_number = ${followupNumber}
-          AND lf.status = 'connected'
-          AND lf.connected_date IS NOT NULL
-          AND lf.connected_date >= ${startIso}::timestamp
-          AND lf.connected_date <= ${endIso}::timestamp
-          AND l.assigned_dt_id IS NOT NULL
-          AND u.role = 'dt'
-          ${brandCond}
-        GROUP BY lf.payload->>'connected_choice'
-      `);
+      const connectedFollowupFilter = sqlConnectedFollowupFilters({
+        startIso,
+        endIso,
+        brand,
+        followupNumber,
+      });
+
+      const [conversionResult, totalConnectedResult] = await Promise.all([
+        db.execute(sql`
+          SELECT
+            lf.payload->>'connected_choice' AS choice,
+            COUNT(DISTINCT lf.id)::int AS cnt
+          FROM lead_lifecycle_followups lf
+          INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
+          INNER JOIN leads l ON ol.lead_id = l.id
+          INNER JOIN users u ON l.assigned_dt_id = u.id
+          WHERE ${connectedFollowupFilter}
+          GROUP BY lf.payload->>'connected_choice'
+        `),
+        db.execute(sql`
+          SELECT COUNT(DISTINCT lf.id)::int AS cnt
+          FROM lead_lifecycle_followups lf
+          INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
+          INNER JOIN leads l ON ol.lead_id = l.id
+          INNER JOIN users u ON l.assigned_dt_id = u.id
+          WHERE ${connectedFollowupFilter}
+        `),
+      ]);
 
       const rows = Array.isArray(conversionResult)
         ? conversionResult
@@ -116,7 +131,22 @@ export async function GET(request: NextRequest) {
       const conversionBreakdown = parseConversionBreakdownRows(
         rows as { choice?: string | null; cnt?: number }[]
       );
-      return { converted: conversionBreakdown.reviewed, conversionBreakdown };
+
+      const totalConnectedRows = Array.isArray(totalConnectedResult)
+        ? totalConnectedResult
+        : (totalConnectedResult as { rows?: unknown[] })?.rows ?? [];
+      const totalConnectedSql = Number(
+        (totalConnectedRows[0] as { cnt?: number } | undefined)?.cnt ?? 0
+      );
+      const breakdownSum = sumConversionBreakdown(conversionBreakdown);
+      const totalConnected =
+        totalConnectedSql > 0 ? totalConnectedSql : breakdownSum;
+
+      return {
+        converted: conversionBreakdown.reviewed,
+        conversionBreakdown,
+        totalConnected,
+      };
     }
 
     async function getFollowupAnalytics(followupNumber: number) {
@@ -192,29 +222,42 @@ export async function GET(request: NextRequest) {
         rescheduledLead: rescheduledLeadCount,
       };
 
-      const attempts = await db
-        .select({
-          outcome: leadLifecycleFollowupAttempts.outcome,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(leadLifecycleFollowupAttempts)
-        .innerJoin(
-          leadLifecycleFollowups,
-          eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
-        )
-        .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
-        .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
-        .innerJoin(users, eq(leads.assigned_dt_id, users.id))
-        .where(
-          and(
-            eq(leadLifecycleFollowups.followup_number, followupNumber),
-            baseJoin,
-            leadPoolCondition,
-            gte(leadLifecycleFollowupAttempts.attempt_date, startDate),
-            lte(leadLifecycleFollowupAttempts.attempt_date, endDate)
-          )
-        )
-        .groupBy(leadLifecycleFollowupAttempts.outcome);
+      const dedupeCteOpts = {
+        startIso,
+        endIso,
+        brand,
+        followupNumber,
+        partition: 'lead' as const,
+        withLeadPoolFilter: true,
+      };
+
+      const stageAttemptMetrics = await db.execute(sql`
+        WITH ${dedupedAttemptsCte(dedupeCteOpts)}
+        SELECT
+          (SELECT COUNT(*)::int FROM attempts_deduped) AS attempted,
+          (SELECT COUNT(*)::int FROM (
+            SELECT lead_id, attempt_day_ist
+            FROM attempts_base
+            GROUP BY lead_id, attempt_day_ist
+            HAVING BOOL_OR(LOWER(TRIM(outcome)) = 'connected')
+          ) connected_lead_days) AS connected
+      `);
+
+      const stageMetricsRows = Array.isArray(stageAttemptMetrics)
+        ? stageAttemptMetrics
+        : (stageAttemptMetrics as { rows?: unknown[] })?.rows ?? [];
+      const stageMetrics = stageMetricsRows[0] as { attempted?: number; connected?: number } | undefined;
+
+      const attemptsResult = await db.execute(sql`
+        WITH ${dedupedAttemptsCte(dedupeCteOpts)}
+        SELECT LOWER(TRIM(outcome)) AS outcome, COUNT(*)::int AS cnt
+        FROM attempts_deduped
+        GROUP BY LOWER(TRIM(outcome))
+      `);
+
+      const attemptsRows = Array.isArray(attemptsResult)
+        ? attemptsResult
+        : (attemptsResult as { rows?: unknown[] })?.rows ?? [];
 
       const startStr = startIso;
       const endStr = endIso;
@@ -230,48 +273,19 @@ export async function GET(request: NextRequest) {
 
       try {
         const breakdownResult = await db.execute(sql`
-          WITH attempts_with_context AS (
+          WITH ${dedupedAttemptsCte(dedupeCteOpts)},
+          attempts_with_context AS (
             SELECT
-              fa.id,
-              fa.outcome,
+              d.id,
+              d.outcome,
               (SELECT COUNT(*)::int FROM lead_lifecycle_followup_attempts fa2
-               WHERE fa2.followup_id = fa.followup_id
-               AND fa2.attempt_date < fa.attempt_date) AS prev_count,
+               WHERE fa2.followup_id = d.followup_id
+               AND fa2.attempt_date < d.attempt_date) AS prev_count,
               (SELECT fa3.outcome FROM lead_lifecycle_followup_attempts fa3
-               WHERE fa3.followup_id = fa.followup_id
-               AND fa3.attempt_date < fa.attempt_date
+               WHERE fa3.followup_id = d.followup_id
+               AND fa3.attempt_date < d.attempt_date
                ORDER BY fa3.attempt_date DESC LIMIT 1) AS prev_outcome
-            FROM lead_lifecycle_followup_attempts fa
-            INNER JOIN lead_lifecycle_followups lf ON fa.followup_id = lf.id
-            INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
-            INNER JOIN leads l ON ol.lead_id = l.id
-            INNER JOIN users u ON l.assigned_dt_id = u.id
-            WHERE lf.followup_number = ${followupNumber}
-              AND ol.status = 'active'
-              AND l.activity_status = 'active'
-              AND l.assigned_dt_id IS NOT NULL
-              AND u.role = 'dt'
-              AND u.active_status = true
-              ${
-                brand === 'fitelo'
-                  ? sql`AND l.brand = 'fitelo'`
-                  : sql`AND (l.brand = 'fitty' OR l.brand IS NULL)`
-              }
-              AND fa.attempt_date >= ${startStr}
-              AND fa.attempt_date <= ${endStr}
-              AND (
-                (lf.attempt_count = 0 AND lf.scheduled_date >= ${startStr} AND lf.scheduled_date <= ${endStr})
-                OR
-                (lf.attempt_count > 0 AND lf.first_attempt_date IS NOT NULL
-                 AND lf.first_attempt_date >= ${startStr} AND lf.first_attempt_date <= ${endStr})
-                OR
-                (lf.attempt_count > 0 AND EXISTS (
-                  SELECT 1 FROM lead_lifecycle_followup_attempts fa_in_range
-                  WHERE fa_in_range.followup_id = lf.id
-                    AND fa_in_range.attempt_date >= ${startStr}
-                    AND fa_in_range.attempt_date <= ${endStr}
-                ))
-              )
+            FROM attempts_deduped d
           ),
           with_lead_type AS (
             SELECT
@@ -326,19 +340,16 @@ export async function GET(request: NextRequest) {
         console.warn('[Analytics] Call attempt breakdown query failed:', breakdownErr);
       }
 
-      let attemptedCount = 0;
-      let connectedCount = 0;
+      const attemptedCount = Number(stageMetrics?.attempted ?? 0);
+      const connectedCount = Number(stageMetrics?.connected ?? 0);
       let callLaterCount = 0;
       let cnrBusyFailedWrongNumberCount = 0;
 
-      for (const attempt of attempts) {
-        const count = attempt.count || 0;
-        attemptedCount += count;
+      for (const attempt of attemptsRows as { outcome?: string | null; cnt?: number }[]) {
+        const count = Number(attempt.cnt ?? 0);
+        const outcome = attempt.outcome?.toLowerCase() ?? '';
 
-        switch (attempt.outcome?.toLowerCase()) {
-          case 'connected':
-            connectedCount += count;
-            break;
+        switch (outcome) {
           case 'call_later':
           case 'busy':
             callLaterCount += count;
@@ -394,12 +405,27 @@ export async function GET(request: NextRequest) {
 
     const mergeSection = (
       base: Omit<AnalyticsSection, 'converted' | 'conversionBreakdown'>,
-      conv: { converted: number; conversionBreakdown: ConversionBreakdown }
-    ): AnalyticsSection => ({
-      ...base,
-      converted: conv.converted,
-      conversionBreakdown: conv.conversionBreakdown,
-    });
+      conv: {
+        converted: number;
+        conversionBreakdown: ConversionBreakdown;
+        totalConnected: number;
+      }
+    ): AnalyticsSection => {
+      const connected =
+        conv.totalConnected > 0
+          ? conv.totalConnected
+          : sumConversionBreakdown(conv.conversionBreakdown);
+      const leads = base.leads;
+      return {
+        ...base,
+        connectedAttempts: base.connected,
+        connected,
+        connectedPercentage:
+          leads > 0 ? parseFloat(((connected / leads) * 100).toFixed(2)) : 0,
+        converted: conv.converted,
+        conversionBreakdown: conv.conversionBreakdown,
+      };
+    };
 
     const counselling = mergeSection(counsellingBase, counsellingConv);
     const firstFollowup = mergeSection(firstFollowupBase, firstFollowupConv);
@@ -415,66 +441,47 @@ export async function GET(request: NextRequest) {
       lte(leadLifecycleFollowupAttempts.attempt_date, endDate)
     );
 
-    const [attemptsResult, uniqueCustomersCalledResult, uniqueCustomersConnectedResult, uniqueLeadsTouchedResult] =
-      await Promise.all([
-        db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(leadLifecycleFollowupAttempts)
-          .innerJoin(
-            leadLifecycleFollowups,
-            eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
-          )
-          .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
-          .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
-          .innerJoin(users, eq(leads.assigned_dt_id, users.id))
-          .where(activityWhere),
-        db
-          .select({ count: sql<number>`COUNT(DISTINCT ${customers.id})::int` })
-          .from(leadLifecycleFollowupAttempts)
-          .innerJoin(
-            leadLifecycleFollowups,
-            eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
-          )
-          .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
-          .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
-          .innerJoin(customers, eq(leads.customer_id, customers.id))
-          .innerJoin(users, eq(leads.assigned_dt_id, users.id))
-          .where(activityWhere),
-        db
-          .select({ count: sql<number>`COUNT(DISTINCT ${customers.id})::int` })
-          .from(leadLifecycleFollowupAttempts)
-          .innerJoin(
-            leadLifecycleFollowups,
-            eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
-          )
-          .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
-          .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
-          .innerJoin(customers, eq(leads.customer_id, customers.id))
-          .innerJoin(users, eq(leads.assigned_dt_id, users.id))
-          .where(
-            and(
-              activityWhere,
-              eq(leadLifecycleFollowupAttempts.outcome, 'connected')
-            )
-          ),
-        db
-          .select({ count: sql<number>`COUNT(DISTINCT ${leads.id})::int` })
-          .from(leadLifecycleFollowupAttempts)
-          .innerJoin(
-            leadLifecycleFollowups,
-            eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
-          )
-          .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
-          .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
-          .innerJoin(users, eq(leads.assigned_dt_id, users.id))
-          .where(activityWhere),
-      ]);
+    const activityCteOpts = {
+      startIso,
+      endIso,
+      brand,
+      partition: 'customer' as const,
+      withLeadPoolFilter: false,
+    };
+
+    const [attemptsResult, activityDedupedResult] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(leadLifecycleFollowupAttempts)
+        .innerJoin(
+          leadLifecycleFollowups,
+          eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
+        )
+        .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
+        .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
+        .innerJoin(users, eq(leads.assigned_dt_id, users.id))
+        .where(activityWhere),
+      db.execute(sql`
+        WITH ${dedupedAttemptsCte(activityCteOpts)}
+        SELECT
+          (SELECT COUNT(*)::int FROM (
+            SELECT DISTINCT customer_id, attempt_day_ist FROM attempts_base
+          ) customer_days) AS unique_customers_called,
+          (SELECT COUNT(*)::int FROM connected_customer_days) AS unique_customers_connected
+      `),
+    ]);
+
+    const activityDedupedRows = Array.isArray(activityDedupedResult)
+      ? activityDedupedResult
+      : (activityDedupedResult as { rows?: unknown[] })?.rows ?? [];
+    const activityDeduped = activityDedupedRows[0] as
+      | { unique_customers_called?: number; unique_customers_connected?: number }
+      | undefined;
 
     const activity = {
       attempts: attemptsResult[0]?.count ?? 0,
-      uniqueCustomersCalled: uniqueCustomersCalledResult[0]?.count ?? 0,
-      uniqueCustomersConnected: uniqueCustomersConnectedResult[0]?.count ?? 0,
-      uniqueLeadsTouched: uniqueLeadsTouchedResult[0]?.count ?? 0,
+      uniqueCustomersCalled: Number(activityDeduped?.unique_customers_called ?? 0),
+      uniqueCustomersConnected: Number(activityDeduped?.unique_customers_connected ?? 0),
     };
 
     const [distinctLeadsResult, distinctReviewedResult] = await Promise.all([
@@ -503,19 +510,13 @@ export async function GET(request: NextRequest) {
           )
       `),
       db.execute(sql`
-        SELECT COUNT(DISTINCT l.id)::int AS cnt
+        SELECT COUNT(DISTINCT lf.id)::int AS cnt
         FROM lead_lifecycle_followups lf
         INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
         INNER JOIN leads l ON ol.lead_id = l.id
         INNER JOIN users u ON l.assigned_dt_id = u.id
-        WHERE lf.status = 'connected'
-          AND lf.connected_date IS NOT NULL
-          AND lf.connected_date >= ${startIso}::timestamp
-          AND lf.connected_date <= ${endIso}::timestamp
+        WHERE ${sqlConnectedFollowupFilters({ startIso, endIso, brand })}
           AND lf.payload->>'connected_choice' = 'reviewed'
-          AND l.assigned_dt_id IS NOT NULL
-          AND u.role = 'dt'
-          ${brandCond}
       `),
     ]);
 

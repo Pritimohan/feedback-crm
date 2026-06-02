@@ -79,7 +79,21 @@ export function emptyConversionBreakdown(): ConversionBreakdown {
     issue_with_product: 0,
     interested: 0,
     didnt_reviewed: 0,
+    unknown: 0,
   };
+}
+
+export function sumConversionBreakdown(
+  breakdown: ConversionBreakdown | null | undefined
+): number {
+  if (!breakdown) return 0;
+  return (
+    breakdown.reviewed +
+    breakdown.issue_with_product +
+    breakdown.interested +
+    breakdown.didnt_reviewed +
+    breakdown.unknown
+  );
 }
 
 export function parseConversionBreakdownRows(
@@ -87,13 +101,14 @@ export function parseConversionBreakdownRows(
 ): ConversionBreakdown {
   const breakdown = emptyConversionBreakdown();
   for (const row of rows) {
-    const choice = (row.choice ?? '').toLowerCase();
+    const choice = (row.choice ?? '').toLowerCase().trim();
     const cnt = Number(row.cnt ?? 0);
     if (choice === 'reviewed') breakdown.reviewed = cnt;
     else if (choice === 'issue_with_product') breakdown.issue_with_product = cnt;
     else if (choice === 'interested') breakdown.interested = cnt;
     else if (choice === 'didnt_reviewed' || choice === 'dont_reviewed')
       breakdown.didnt_reviewed += cnt;
+    else breakdown.unknown += cnt;
   }
   return breakdown;
 }
