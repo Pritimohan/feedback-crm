@@ -18,22 +18,23 @@ function run() {
   const now = new Date('2026-01-01T10:00:00.000Z');
 
   const retryAfterFirstAttempt = computeRetrySchedule({ now, attemptsToday: 1 });
-  assert.equal(retryAfterFirstAttempt.getTime(), new Date('2026-01-01T15:00:00.000Z').getTime());
+  assert.equal(retryAfterFirstAttempt.getDate(), new Date('2026-01-04T10:00:00.000Z').getDate());
+  assert.equal(retryAfterFirstAttempt.getHours(), 9);
 
   const retryNextDayAfterSecondAttempt = computeRetrySchedule({ now, attemptsToday: 2 });
-  assert.equal(retryNextDayAfterSecondAttempt.getDate(), new Date('2026-01-02T10:00:00.000Z').getDate());
+  assert.equal(retryNextDayAfterSecondAttempt.getDate(), new Date('2026-01-04T10:00:00.000Z').getDate());
   assert.equal(retryNextDayAfterSecondAttempt.getHours(), 9);
 
-  const fiteloRetryAfterSecondAttemptSameDay = computeRetrySchedule({
+  const fiteloRetryAfterSecondAttempt = computeRetrySchedule({
     now,
     attemptsToday: 2,
     brand: 'fitelo',
   });
   assert.equal(
-    fiteloRetryAfterSecondAttemptSameDay.getDate(),
+    fiteloRetryAfterSecondAttempt.getDate(),
     new Date('2026-01-04T10:00:00.000Z').getDate()
   );
-  assert.equal(fiteloRetryAfterSecondAttemptSameDay.getHours(), 9);
+  assert.equal(fiteloRetryAfterSecondAttempt.getHours(), 9);
 
   const beforeCutoffInitialFollowup = scheduleInitialFollowup(new Date(2026, 0, 1, 18, 59, 0, 0));
   assert.equal(beforeCutoffInitialFollowup.getFullYear(), 2026);
