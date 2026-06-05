@@ -10,7 +10,7 @@ export interface LifecycleTemplate {
   version: number;
   firstFollowupOffsetDays: number;
   nextFollowupOffsetDays: number;
-  maxAttemptsByLeadType: Record<'nps' | 'review', number>;
+  maxAttemptsByLeadType: Record<'nps' | 'review' | 'feedback', number>;
 }
 
 export const DEFAULT_LEAD_LIFECYCLE_TEMPLATE: LifecycleTemplate = {
@@ -21,6 +21,7 @@ export const DEFAULT_LEAD_LIFECYCLE_TEMPLATE: LifecycleTemplate = {
   maxAttemptsByLeadType: {
     nps: REVIEW_MAX_ATTEMPTS,
     review: REVIEW_MAX_ATTEMPTS,
+    feedback: REVIEW_MAX_ATTEMPTS,
   },
 };
 

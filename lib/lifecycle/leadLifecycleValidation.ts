@@ -1,9 +1,11 @@
-import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
+import { getMaxFollowupNumber, MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 
-export type LeadType = 'nps' | 'review';
+export type LeadType = 'nps' | 'review' | 'feedback';
 export type LeadActivityStatus = 'active' | 'inactive' | 'deferred';
 export type NonConnectedOutcome = 'busy' | 'wrong_number' | 'not_interested' | 'no_answer';
-export type ConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'didnt_reviewed';
+export type ReviewConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'didnt_reviewed';
+export type FeedbackConnectedChoice = 'feedbacked' | 'didnt_feedback';
+export type ConnectedChoice = ReviewConnectedChoice | FeedbackConnectedChoice;
 export type TouchStatus =
   | 'pending'
   | 'busy'
@@ -14,7 +16,14 @@ export type TouchStatus =
   | 'connected';
 
 export const NON_CONNECTED_OUTCOMES: NonConnectedOutcome[] = ['busy', 'wrong_number', 'not_interested', 'no_answer'];
-export const CONNECTED_CHOICES: ConnectedChoice[] = ['reviewed', 'issue_with_product', 'interested', 'didnt_reviewed'];
+export const REVIEW_CONNECTED_CHOICES: ReviewConnectedChoice[] = [
+  'reviewed',
+  'issue_with_product',
+  'interested',
+  'didnt_reviewed',
+];
+export const FEEDBACK_CONNECTED_CHOICES: FeedbackConnectedChoice[] = ['feedbacked', 'didnt_feedback'];
+export const CONNECTED_CHOICES: ConnectedChoice[] = [...REVIEW_CONNECTED_CHOICES, ...FEEDBACK_CONNECTED_CHOICES];
 
 export function isNonConnectedOutcome(value: string): value is NonConnectedOutcome {
   return NON_CONNECTED_OUTCOMES.includes(value as NonConnectedOutcome);
@@ -24,11 +33,19 @@ export function isConnectedChoice(value: string): value is ConnectedChoice {
   return CONNECTED_CHOICES.includes(value as ConnectedChoice);
 }
 
-export function canChooseInterested(followupNumber: number): boolean {
-  return followupNumber < MAX_FOLLOWUP_NUMBER;
+export function isFeedbackConnectedChoice(value: string): value is FeedbackConnectedChoice {
+  return FEEDBACK_CONNECTED_CHOICES.includes(value as FeedbackConnectedChoice);
 }
 
-export function getConnectedChoicesForStage(followupNumber: number): ConnectedChoice[] {
+export function canChooseInterested(followupNumber: number, leadType: LeadType = 'review'): boolean {
+  return followupNumber < getMaxFollowupNumber(leadType);
+}
+
+export function getConnectedChoicesForStage(followupNumber: number, leadType: LeadType = 'review'): ConnectedChoice[] {
+  if (leadType === 'feedback') {
+    return ['feedbacked', 'didnt_feedback'];
+  }
+
   if (followupNumber >= MAX_FOLLOWUP_NUMBER) {
     return ['reviewed', 'issue_with_product', 'didnt_reviewed'];
   }
@@ -48,11 +65,12 @@ export interface ConnectedChoicePayload {
 export function validateConnectedChoicePayload(params: {
   choice: ConnectedChoice;
   followupNumber: number;
+  leadType?: LeadType;
   payload: ConnectedChoicePayload;
 }): { valid: boolean; reason?: string } {
-  const { choice, followupNumber, payload } = params;
+  const { choice, followupNumber, payload, leadType = 'review' } = params;
 
-  if (choice === 'interested' && !canChooseInterested(followupNumber)) {
+  if (choice === 'interested' && !canChooseInterested(followupNumber, leadType)) {
     return { valid: false, reason: 'Interested is not available on the final follow-up stage' };
   }
 
@@ -102,7 +120,14 @@ export interface ConnectedTransitionResult {
   advanceStage: boolean;
 }
 
-export function computeConnectedTransition(choice: ConnectedChoice): ConnectedTransitionResult {
+export function computeConnectedTransition(
+  choice: ConnectedChoice,
+  leadType: LeadType = 'review'
+): ConnectedTransitionResult {
+  if (leadType === 'feedback') {
+    return { nextActivityStatus: 'inactive', advanceStage: false };
+  }
+
   switch (choice) {
     case 'interested':
       return { nextActivityStatus: 'active', advanceStage: true };

@@ -6,6 +6,7 @@ import {
   scheduleNextFollowupFromConnected,
 } from '../lib/lifecycle/leadLifecycleSchedule';
 import { shouldAdvanceIssueWithProduct } from '../lib/services/leadLifecycleEngine';
+import { getMaxFollowupNumber } from '../lib/lifecycle/followupStageBounds';
 import {
   canChooseInterested,
   computeConnectedTransition,
@@ -167,6 +168,20 @@ function run() {
     followupNumber: 3,
   });
   assert.equal(issueAtFinalStageCloses, false);
+
+  assert.equal(getMaxFollowupNumber('feedback'), 0);
+  assert.equal(getMaxFollowupNumber('review'), 3);
+
+  const feedbackChoices = getConnectedChoicesForStage(0, 'feedback');
+  assert.deepEqual(feedbackChoices, ['feedbacked', 'didnt_feedback']);
+
+  const feedbackedTransition = computeConnectedTransition('feedbacked', 'feedback');
+  assert.equal(feedbackedTransition.nextActivityStatus, 'inactive');
+  assert.equal(feedbackedTransition.advanceStage, false);
+
+  const didntFeedbackTransition = computeConnectedTransition('didnt_feedback', 'feedback');
+  assert.equal(didntFeedbackTransition.nextActivityStatus, 'inactive');
+  assert.equal(didntFeedbackTransition.advanceStage, false);
 
   console.log('Lead lifecycle rules tests passed.');
 }

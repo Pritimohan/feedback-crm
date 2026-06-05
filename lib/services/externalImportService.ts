@@ -5,14 +5,15 @@ import { createLifecycleForLead } from '@/lib/services/leadLifecycleEngine';
 import { selectLeastLoadedDt } from '@/lib/services/callDistributionService';
 
 /**
- * Fitty-style `findAvailableDT`: least total assignments per active DT, deterministic tie-break.
+ * Fitty-style `findAvailableDT`: least total assignments per eligible DT, deterministic tie-break.
  * Maps Fitty's `customers.assigned_dt_id` to `leads.assigned_dt_id`; counts all assigned leads (not only active), matching Fitty's "total assigned" comment.
  */
 export async function resolveAssignedDt(
-  preferredDtId?: string | null,
-  tx?: FeedbackDbTransaction
+  preferredDtId: string | null | undefined,
+  tx: FeedbackDbTransaction | undefined,
+  options: { brand: 'fitty' | 'fitelo'; leadType: 'nps' | 'review' | 'feedback' }
 ): Promise<string | null> {
-  return selectLeastLoadedDt(preferredDtId, tx);
+  return selectLeastLoadedDt(preferredDtId, tx, options);
 }
 
 export async function resolveExistingCustomerByPhone(phone: string) {
@@ -22,13 +23,14 @@ export async function resolveExistingCustomerByPhone(phone: string) {
 
 export async function resolveOrCreateLeadForCustomer(params: {
   customerId: string;
-  leadType: 'nps' | 'review';
+  leadType: 'nps' | 'review' | 'feedback';
   preferredDtId?: string | null;
   brand?: 'fitty' | 'fitelo';
   remarks?: string;
   tx?: FeedbackDbTransaction;
 }) {
   const d = params.tx ?? db;
+  const brand = params.brand ?? 'fitty';
 
   const [existingActiveLead] = await d
     .select()
@@ -45,7 +47,10 @@ export async function resolveOrCreateLeadForCustomer(params: {
     return { lead: existingActiveLead, created: false };
   }
 
-  let resolvedDtId = await resolveAssignedDt(params.preferredDtId, params.tx);
+  let resolvedDtId = await resolveAssignedDt(params.preferredDtId, params.tx, {
+    brand,
+    leadType: params.leadType,
+  });
   if (!resolvedDtId) {
     const [latestLeadForCustomer] = await d
       .select({ assignedDtId: leads.assigned_dt_id })

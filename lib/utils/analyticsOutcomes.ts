@@ -63,6 +63,8 @@ export function formatConnectedChoiceForDisplay(choice: string | null | undefine
   if (c === 'issue_with_product') return 'Issue with product';
   if (c === 'interested') return 'Interested';
   if (c === 'didnt_reviewed' || c === 'dont_reviewed') return "Didn't review";
+  if (c === 'feedbacked') return 'Feedbacked';
+  if (c === 'didnt_feedback') return "Didn't feedback";
   return choice?.replace(/_/g, ' ') || '—';
 }
 

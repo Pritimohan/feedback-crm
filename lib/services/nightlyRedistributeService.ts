@@ -13,6 +13,11 @@ import {
   getActiveDietitians,
   type ClassifiedFollowupRow,
 } from '@/lib/services/rebalanceEligibilityService';
+import {
+  getEligibleDtIdsByLeadTypeMap,
+  pickEligibleTargetDt,
+} from '@/lib/services/dtBrandProfileService';
+import type { LeadType } from '@/lib/lifecycle/leadLifecycleValidation';
 
 const CRON_BRANDS: CrmBrand[] = ['fitty', 'fitelo'];
 
@@ -127,6 +132,7 @@ export async function fetchCronEligibleStage0(brand: CrmBrand): Promise<Classifi
       followupAssignedDtId: leadLifecycleFollowups.assigned_dt_id,
       lifecycleStatus: leadLifecycles.status,
       leadId: leads.id,
+      leadType: leads.lead_type,
       leadAssignedDtId: leads.assigned_dt_id,
       leadActivityStatus: leads.activity_status,
     })
@@ -157,6 +163,7 @@ export async function fetchCronEligibleStage0(brand: CrmBrand): Promise<Classifi
     classified.push({
       followupId: r.followupId,
       leadId: r.leadId,
+      leadType: r.leadType as LeadType,
       followupNumber: r.followupNumber,
       ownerDtId: r.leadAssignedDtId,
       lifecycleStatus: r.lifecycleStatus,
@@ -191,12 +198,13 @@ export async function redistributeNightlyStage0ForBrand(
   });
 
   try {
-    const activeDTs = await getActiveDietitians();
+    const activeDTs = await getActiveDietitians(brand);
     if (activeDTs.length === 0) {
       return emptyStats('No active agents found');
     }
 
     const activeDtIds = activeDTs.map((dt) => dt.id);
+    const eligibleDtIdsByLeadType = await getEligibleDtIdsByLeadTypeMap(brand);
     const todayLoads = await getTodayPendingCallsPerDt(brand);
     const startingLoads = new Map<string, number>();
     for (const dtId of activeDtIds) startingLoads.set(dtId, 0);
@@ -284,7 +292,12 @@ export async function redistributeNightlyStage0ForBrand(
 
     for (let i = 0; i < eligible.length; i++) {
       const row = eligible[i];
-      const targetDtId = plannedTargets[i];
+      const targetDtId = pickEligibleTargetDt(
+        plannedTargets[i],
+        row.leadType,
+        activeDtIds,
+        eligibleDtIdsByLeadType
+      );
       const current = row.currentDtId;
       if (!targetDtId || current === targetDtId) continue;
 
