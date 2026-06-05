@@ -11,6 +11,9 @@ const OBJECTIVES: Record<LeadType, Record<number, string>> = {
     1: 'Follow up NPS response',
     2: 'Close NPS conversation — final closure',
   },
+  feedback: {
+    0: 'Collect product feedback',
+  },
 };
 
 export function getCallObjective(leadType: LeadType, followupNumber: number): string {

@@ -27,7 +27,7 @@ import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 const { Title, Paragraph, Text } = Typography;
 const { Search } = Input;
-interface Customer { id: string; name: string; phone: string; email: string; leadType?: 'review' | 'nps' | null; currentLifecycleStage: string; currentFollowupStage?: number | null; ltvScore: string; lastOrderDate: string; createdAt: string; assignedDtId: string | null; latestProductName?: string | null; sku?: string | null; source?: string | null; variant?: string | null; brand?: 'fitty' | 'fitelo' | null; }
+interface Customer { id: string; name: string; phone: string; email: string; leadType?: 'review' | 'nps' | 'feedback' | null; currentLifecycleStage: string; currentFollowupStage?: number | null; ltvScore: string; lastOrderDate: string; createdAt: string; assignedDtId: string | null; latestProductName?: string | null; sku?: string | null; source?: string | null; variant?: string | null; brand?: 'fitty' | 'fitelo' | null; }
 interface DT { id: string; name: string; email: string; }
 interface Order { productName?: string | null; totalAmount?: string | null; quantity?: number | null; orderDate?: string | Date | null; deliveryStatus?: string | null; }
 interface Interaction { timestamp: string; structuredData: Record<string, unknown> | null; outcome?: string | null; recordingUrl?: string | null; dt?: { name?: string | null } | null; followupNumber?: number | null; formData?: Record<string, unknown> | null; }
@@ -45,7 +45,7 @@ export default function AllCustomersPage() {
   const [selectedDietitianId, setSelectedDietitianId] = useState<string | null>(null);
   const [selectedLifecycleStage, setSelectedLifecycleStage] = useState<string | null>(null);
   const [selectedFollowupStage, setSelectedFollowupStage] = useState<number | null>(null);
-  const [selectedLeadType, setSelectedLeadType] = useState<'review' | 'nps' | null>('review');
+  const [selectedLeadType, setSelectedLeadType] = useState<'review' | 'nps' | 'feedback' | null>('review');
   const [selectedFollowupId, setSelectedFollowupId] = useState<string | null>(null);
   const [followupModalVisible, setFollowupModalVisible] = useState(false);
   const [openingFollowupForCustomerId, setOpeningFollowupForCustomerId] = useState<string | null>(null);
@@ -82,7 +82,7 @@ export default function AllCustomersPage() {
   }, [message, selectedLeadType]);
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  const applyFilters = (search: string, dtId: string | null, stage: string | null, followupStage: number | null, leadType: 'review' | 'nps' | null) => {
+  const applyFilters = (search: string, dtId: string | null, stage: string | null, followupStage: number | null, leadType: 'review' | 'nps' | 'feedback' | null) => {
     let filtered = customers;
     if (search) filtered = filtered.filter((customer) => customer.name.toLowerCase().includes(search.toLowerCase()) || customer.phone.includes(search) || (customer.email && customer.email.toLowerCase().includes(search.toLowerCase())));
     if (dtId) filtered = filtered.filter((customer) => customer.assignedDtId === dtId);
@@ -166,7 +166,7 @@ export default function AllCustomersPage() {
       <Paragraph type="secondary">View and manage all customers across all agents</Paragraph>
       <Space wrap style={{ marginBottom: 16 }}>
         <Search placeholder="Search by name, phone, or email" onSearch={(v) => { setSearchText(v); applyFilters(v, selectedDietitianId, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} onChange={(e) => { const v = e.target.value; setSearchText(v); applyFilters(v, selectedDietitianId, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} style={{ width: 300 }} allowClear />
-        <Select placeholder="Filter by Lead Type" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedLeadType(next); setSelectedLifecycleStage(null); applyFilters(searchText, selectedDietitianId, null, selectedFollowupStage, next); }} value={selectedLeadType} options={[{ label: 'Review', value: 'review' }, { label: 'NPS', value: 'nps' }]} />
+        <Select placeholder="Filter by Lead Type" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedLeadType(next); setSelectedLifecycleStage(null); applyFilters(searchText, selectedDietitianId, null, selectedFollowupStage, next); }} value={selectedLeadType} options={[{ label: 'Review', value: 'review' }, { label: 'NPS', value: 'nps' }, { label: 'Feedback', value: 'feedback' }]} />
         <Select placeholder="Filter by Agent" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedDietitianId(next); applyFilters(searchText, next, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} value={selectedDietitianId} options={[...Array.from(dietitians.values()).map((dt) => ({ label: dt.name, value: dt.id }))]} />
         <Select placeholder="Filter by Lifecycle Stage" allowClear style={{ width: 180 }} onChange={(v) => { const next = v ?? null; setSelectedLifecycleStage(next); applyFilters(searchText, selectedDietitianId, next, selectedFollowupStage, selectedLeadType); }} value={selectedLifecycleStage} options={LIFECYCLE_FILTER_OPTIONS} />
         <Select placeholder="Filter by follow-up stage" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedFollowupStage(next); applyFilters(searchText, selectedDietitianId, selectedLifecycleStage, next, selectedLeadType); }} value={selectedFollowupStage} options={FOLLOWUP_STAGE_OPTIONS} />

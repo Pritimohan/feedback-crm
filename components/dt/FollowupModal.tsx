@@ -22,6 +22,7 @@ import {
 import { CheckCircleOutlined, CloseCircleOutlined, MailOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import CallButton from '@/components/dt/CallButton';
+import { getConnectedChoicesForStage } from '@/lib/lifecycle/leadLifecycleValidation';
 import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
@@ -50,7 +51,13 @@ function renderPreviousInteractionContent(remarks: string | null, payload: unkno
   addTextRow('review_remark', 'Review Remark', payloadObj?.review_remark);
   addTextRow('issue_description', 'Issue Description', payloadObj?.issue_description);
   addTextRow('interested_remark', 'Interested Remark', payloadObj?.interested_remark);
-  addTextRow('didnt_reviewed_remark', "Didn't Review Remark", payloadObj?.didnt_reviewed_remark);
+  const connectedChoice =
+    typeof payloadObj?.connected_choice === 'string' ? payloadObj.connected_choice.trim() : '';
+  if (connectedChoice === 'didnt_feedback') {
+    addTextRow('didnt_feedback_remark', "Didn't Feedback Remark", payloadObj?.didnt_reviewed_remark);
+  } else {
+    addTextRow('didnt_reviewed_remark', "Didn't Review Remark", payloadObj?.didnt_reviewed_remark);
+  }
 
   const screenshotUrl = typeof payloadObj?.review_screenshot_url === 'string' ? payloadObj.review_screenshot_url.trim() : '';
   if (screenshotUrl) {
@@ -67,7 +74,22 @@ function renderPreviousInteractionContent(remarks: string | null, payload: unkno
   return <div style={{ lineHeight: 1.6 }}>{rows}</div>;
 }
 
-type ConnectedChoice = 'reviewed' | 'issue_with_product' | 'interested' | 'didnt_reviewed';
+type ConnectedChoice =
+  | 'reviewed'
+  | 'issue_with_product'
+  | 'interested'
+  | 'didnt_reviewed'
+  | 'feedbacked'
+  | 'didnt_feedback';
+
+const CONNECTED_CHOICE_LABELS: Record<ConnectedChoice, string> = {
+  reviewed: 'Reviewed',
+  issue_with_product: 'Issue with product',
+  interested: 'Interested',
+  didnt_reviewed: "Didn't Review",
+  feedbacked: 'Feedbacked',
+  didnt_feedback: "Didn't Feedback",
+};
 
 interface Props {
   followupId: string | null;
@@ -101,7 +123,7 @@ interface FollowupDetails {
   };
   lead: {
     id: string;
-    lead_type: 'nps' | 'review';
+    lead_type: 'nps' | 'review' | 'feedback';
     brand: 'fitty' | 'fitelo' | null;
     source: string | null;
     variant: string | null;
@@ -255,7 +277,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       setSubmitting(true);
       let uploadedReviewScreenshotPath = reviewScreenshotUrl || '';
 
-      if (connectedChoice === 'reviewed' && reviewScreenshotFile) {
+      if ((connectedChoice === 'reviewed' || connectedChoice === 'feedbacked') && reviewScreenshotFile) {
         setUploadingReviewScreenshot(true);
         const formData = new FormData();
         formData.append('file', reviewScreenshotFile);
@@ -347,17 +369,22 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   const sortedPreviousFollowups = [...previousFollowups].sort((a, b) => a.followup_number - b.followup_number);
 
   const connectedOptions: Array<{ label: string; value: ConnectedChoice }> =
-    followup.followup_number >= MAX_FOLLOWUP_NUMBER
-      ? [
-          { label: 'Reviewed', value: 'reviewed' },
-          { label: 'Issue with product', value: 'issue_with_product' },
-          { label: "Didn't Review", value: 'didnt_reviewed' },
-        ]
-      : [
-          { label: 'Reviewed', value: 'reviewed' },
-          { label: 'Issue with product', value: 'issue_with_product' },
-          { label: 'Interested', value: 'interested' },
-        ];
+    lead.lead_type === 'feedback'
+      ? getConnectedChoicesForStage(followup.followup_number, 'feedback').map((value) => ({
+          label: CONNECTED_CHOICE_LABELS[value],
+          value,
+        }))
+      : followup.followup_number >= MAX_FOLLOWUP_NUMBER
+        ? [
+            { label: 'Reviewed', value: 'reviewed' },
+            { label: 'Issue with product', value: 'issue_with_product' },
+            { label: "Didn't Review", value: 'didnt_reviewed' },
+          ]
+        : [
+            { label: 'Reviewed', value: 'reviewed' },
+            { label: 'Issue with product', value: 'issue_with_product' },
+            { label: 'Interested', value: 'interested' },
+          ];
 
   const tabItems = [
     {
@@ -478,7 +505,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
                 style={{ width: 220 }}
               />
 
-              {connectedChoice === 'reviewed' ? (
+              {connectedChoice === 'reviewed' || connectedChoice === 'feedbacked' ? (
                 <>
                   <Space direction="vertical" size="small" style={{ width: '100%' }}>
                     <input
@@ -502,7 +529,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
                         }}
                         loading={uploadingReviewScreenshot || submitting}
                       >
-                        Choose review screenshot
+                        {connectedChoice === 'feedbacked' ? 'Choose feedback screenshot' : 'Choose review screenshot'}
                       </Button>
                       {reviewScreenshotFile || reviewScreenshotUrl ? (
                         <Button
@@ -569,7 +596,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
                 />
               ) : null}
 
-              {connectedChoice === 'didnt_reviewed' ? (
+              {connectedChoice === 'didnt_reviewed' || connectedChoice === 'didnt_feedback' ? (
                 <Input.TextArea
                   placeholder="Remarks (optional)"
                   rows={3}

@@ -1,4 +1,5 @@
 export * from './users';
+export * from './userBrandProfiles';
 export * from './customers';
 export * from './orders';
 export * from './leads';

@@ -17,7 +17,8 @@ export interface CreateCustomerInput {
   purchase_date?: string;
   variant?: string;
   metadata?: Record<string, unknown>;
-  leadType?: 'nps' | 'review';
+  leadType?: 'nps' | 'review' | 'feedback';
+  brand?: 'fitty' | 'fitelo';
   assignedDtId?: string;
   remarks?: string;
   anchorDate?: string;
@@ -82,6 +83,7 @@ function matchesBrandFilter(brand: 'fitty' | 'fitelo') {
 async function findBrandActiveLead(
   customerId: string,
   forcedBrand: 'fitty' | 'fitelo',
+  leadType: 'nps' | 'review' | 'feedback',
   tx: FeedbackDbTransaction
 ) {
   const [lead] = await tx
@@ -90,7 +92,7 @@ async function findBrandActiveLead(
     .where(
       and(
         eq(leads.customer_id, customerId),
-        eq(leads.lead_type, 'review'),
+        eq(leads.lead_type, leadType),
         eq(leads.activity_status, 'active'),
         matchesBrandFilter(forcedBrand)
       )
@@ -145,7 +147,7 @@ export async function createCustomerWithAutoLeadLifecycle(
     throw new Error('VALIDATION_PHONE_INVALID');
   }
 
-  const leadType = 'review' as const;
+  const leadType = input.leadType ?? 'review';
   const source = input.source?.trim() || 'api_manual';
 
   const { customer, lead, lifecycleId } = await db.transaction(async (tx) => {
@@ -221,14 +223,18 @@ export async function ensureLifecycleForExistingCustomerByPhone(
       throw new Error('CUSTOMER_NOT_FOUND_BY_PHONE');
     }
 
-    let lead = await findBrandActiveLead(existingCustomer.id, forcedBrand, tx);
+    const leadType = input.leadType ?? 'review';
+    let lead = await findBrandActiveLead(existingCustomer.id, forcedBrand, leadType, tx);
     if (!lead) {
-      const assignedDtId = await resolveAssignedDt(input.assignedDtId ?? null, tx);
+      const assignedDtId = await resolveAssignedDt(input.assignedDtId ?? null, tx, {
+        brand: forcedBrand,
+        leadType,
+      });
       const [newLead] = await tx
         .insert(leads)
         .values({
           customer_id: existingCustomer.id,
-          lead_type: 'review',
+          lead_type: leadType,
           activity_status: 'active',
           assigned_dt_id: assignedDtId,
           brand: forcedBrand,

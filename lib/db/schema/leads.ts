@@ -3,13 +3,15 @@ import { users } from './users';
 import { customers } from './customers';
 import { sql } from 'drizzle-orm';
 
-export const leadTypeEnum = pgEnum('lead_type', ['nps', 'review']);
+export const leadTypeEnum = pgEnum('lead_type', ['nps', 'review', 'feedback']);
 export const leadActivityStatusEnum = pgEnum('lead_activity_status', ['active', 'inactive', 'deferred']);
 export const connectedChoiceEnum = pgEnum('lead_connected_choice', [
   'reviewed',
   'issue_with_product',
   'interested',
   'didnt_reviewed',
+  'feedbacked',
+  'didnt_feedback',
 ]);
 export const leadBrandEnum = pgEnum('lead_brand', ['fitty', 'fitelo']);
 

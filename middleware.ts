@@ -13,6 +13,7 @@ export async function middleware(request: NextRequest) {
     '/api/cron',
     '/api/customers/warranty',
     '/api/customers/dietplan',
+    '/api/customers/feedback',
   ];
   const isPublic =
     pathname === '/' || publicPrefixes.some((prefix) => pathname.startsWith(prefix));

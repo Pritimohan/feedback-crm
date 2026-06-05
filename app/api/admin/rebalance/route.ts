@@ -49,7 +49,7 @@ export async function GET() {
     const todayStartIso = todayStart.toISOString();
     const todayEndIso = todayEnd.toISOString();
 
-    const activeDTs = await getActiveDietitians();
+    const activeDTs = await getActiveDietitians(brand);
 
     if (activeDTs.length === 0) {
       return NextResponse.json(
@@ -150,7 +150,8 @@ export async function POST(request: Request) {
       // No body
     }
 
-    const activeDTs = await getActiveDietitians();
+    const brand = await getCrmBrandFromCookie();
+    const activeDTs = await getActiveDietitians(brand);
     const resolvedPercentages =
       percentages && percentages.length > 0
         ? percentages

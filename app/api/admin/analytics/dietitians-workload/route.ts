@@ -6,8 +6,8 @@ import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { and, eq, ne, gte, lte, lt, sql, isNotNull, gt, or, isNull } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
+import { getBrandActiveDietitians } from '@/lib/services/dtBrandProfileService';
 import {
-  users,
   leadLifecycleFollowups,
   leadLifecycleFollowupAttempts,
   leadLifecycles,
@@ -74,10 +74,7 @@ export async function GET(request: NextRequest) {
     const dayStart = dayjs.tz(dateStr, TZ).startOf('day').toDate();
     const dayEnd = dayjs.tz(dateStr, TZ).endOf('day').toDate();
 
-    const activeDTs = await db
-      .select({ id: users.id, name: users.name })
-      .from(users)
-      .where(and(eq(users.role, 'dt'), eq(users.active_status, true)));
+    const activeDTs = await getBrandActiveDietitians(brand);
 
     const pendingBase = and(
       eq(leadLifecycleFollowups.status, 'pending'),

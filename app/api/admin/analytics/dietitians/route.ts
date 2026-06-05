@@ -68,6 +68,12 @@ export async function GET(request: NextRequest) {
         INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
         INNER JOIN leads l ON ol.lead_id = l.id
         INNER JOIN users u_act ON l.assigned_dt_id = u_act.id AND u_act.role = 'dt' AND u_act.active_status = true
+          AND EXISTS (
+            SELECT 1 FROM user_brand_profiles ubp
+            WHERE ubp.user_id = u_act.id
+              AND ubp.brand = ${brand === 'fitelo' ? sql`'fitelo'` : sql`'fitty'`}
+              AND ubp.is_active = true
+          )
         WHERE ol.status = 'active'
           AND l.assigned_dt_id IS NOT NULL
           AND l.activity_status = 'active'
@@ -191,6 +197,7 @@ export async function GET(request: NextRequest) {
            FROM lead_pool lp
            WHERE lp.assigned_dt_id = u.id AND lp.first_attempt_date IS NOT NULL) AS ttc_avg
         FROM users u
+        INNER JOIN user_brand_profiles ubp ON ubp.user_id = u.id AND ubp.brand = ${brand === 'fitelo' ? sql`'fitelo'` : sql`'fitty'`} AND ubp.is_active = true
         WHERE u.role = 'dt' AND u.active_status = true
           AND (u.id IN (SELECT assigned_dt_id FROM lead_pool) OR u.id IN (SELECT dt_id FROM attempts_in_range))
       )
@@ -241,7 +248,12 @@ export async function GET(request: NextRequest) {
     });
 
     const allDtResult = await db.execute(sql`
-      SELECT id, name FROM users WHERE role = 'dt' AND active_status = true
+      SELECT u.id, u.name
+      FROM users u
+      INNER JOIN user_brand_profiles ubp ON ubp.user_id = u.id
+        AND ubp.brand = ${brand === 'fitelo' ? sql`'fitelo'` : sql`'fitty'`}
+        AND ubp.is_active = true
+      WHERE u.role = 'dt' AND u.active_status = true
     `);
     const allDtRows = Array.isArray(allDtResult)
       ? allDtResult

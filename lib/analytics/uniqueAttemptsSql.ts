@@ -12,6 +12,17 @@ export function sqlBrandCond(brand: string | null | undefined): SQL {
     : sql`AND (l.brand = 'fitty' OR l.brand IS NULL)`;
 }
 
+/** Agent is globally active and brand-active in user_brand_profiles. */
+export function sqlBrandActiveProfileExists(userTableAlias = 'u', brand?: string | null | undefined): SQL {
+  const b = brand === 'fitelo' ? 'fitelo' : 'fitty';
+  return sql`EXISTS (
+    SELECT 1 FROM user_brand_profiles ubp
+    WHERE ubp.user_id = ${sql.raw(userTableAlias)}.id
+      AND ubp.brand = ${b}
+      AND ubp.is_active = true
+  )`;
+}
+
 /**
  * CRM connected follow-ups in range (connected_date).
  * Do not filter active lifecycle/lead — marking connected sets lead inactive and lifecycle completed.
@@ -116,6 +127,7 @@ export function dedupedAttemptsCte(opts: DedupedAttemptsCteOptions): SQL {
         AND l.assigned_dt_id IS NOT NULL
         AND u.role = 'dt'
         AND u.active_status = true
+        ${sqlBrandActiveProfileExists('u', brand)}
         ${brandCond}
         AND fa.attempt_date >= ${startIso}::timestamp
         AND fa.attempt_date <= ${endIso}::timestamp

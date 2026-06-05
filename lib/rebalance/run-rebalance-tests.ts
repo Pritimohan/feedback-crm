@@ -225,6 +225,7 @@ function testFilterRowsForUiCounts() {
     {
       followupId: '1',
       leadId: 'l1',
+      leadType: 'review',
       followupNumber: 0,
       ownerDtId: 'a',
       lifecycleStatus: 'active',
@@ -236,6 +237,7 @@ function testFilterRowsForUiCounts() {
     {
       followupId: '2',
       leadId: 'l2',
+      leadType: 'review',
       followupNumber: 0,
       ownerDtId: 'a',
       lifecycleStatus: 'inactive',
@@ -245,7 +247,12 @@ function testFilterRowsForUiCounts() {
       currentDtId: 'a',
     },
   ];
-  const ui = filterRowsForUiCounts(rows, active);
+  const eligible = new Map([
+    ['review', new Set(['a'])],
+    ['nps', new Set(['a'])],
+    ['feedback', new Set(['a'])],
+  ] as const);
+  const ui = filterRowsForUiCounts(rows, active, eligible);
   assert.equal(ui.length, 1);
   assert.equal(ui[0].followupId, '1');
 }

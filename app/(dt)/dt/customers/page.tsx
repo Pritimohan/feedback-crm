@@ -36,7 +36,7 @@ interface Customer {
   name: string;
   phone: string;
   email: string | null;
-  leadType?: 'pre_purchase' | 'post_purchase';
+  leadType?: 'review' | 'nps' | 'feedback' | null;
   currentLifecycleStage: string;
   currentFollowupStage?: number | null;
   ltvScore: string;
@@ -93,6 +93,7 @@ export default function CustomersPage() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const [selectedLeadType, setSelectedLeadType] = useState<'review' | 'nps' | 'feedback' | null>(null);
   const [selectedLifecycleStage, setSelectedLifecycleStage] = useState<string | null>(null);
   const [selectedFollowupStage, setSelectedFollowupStage] = useState<number | null>(null);
   const [selectedFollowupId, setSelectedFollowupId] = useState<string | null>(null);
@@ -108,7 +109,7 @@ export default function CustomersPage() {
       const data = await response.json();
       const nextRows = (data.customers || []) as Customer[];
       setCustomers(nextRows);
-      applyFilters(nextRows, searchText, selectedLifecycleStage, selectedFollowupStage);
+      applyFilters(nextRows, searchText, selectedLeadType, selectedLifecycleStage, selectedFollowupStage);
     } catch (error) {
       console.error('Error fetching customers:', error);
       message.error('Failed to load customers');
@@ -124,6 +125,7 @@ export default function CustomersPage() {
   const applyFilters = (
     sourceRows: Customer[],
     nextSearchText: string,
+    nextLeadType: 'review' | 'nps' | 'feedback' | null,
     nextLifecycleStage: string | null,
     nextFollowupStage: number | null
   ) => {
@@ -139,6 +141,10 @@ export default function CustomersPage() {
       );
     }
 
+    if (nextLeadType) {
+      filtered = filtered.filter((customer) => customer.leadType === nextLeadType);
+    }
+
     if (nextLifecycleStage) {
       filtered = filtered.filter((customer) => customer.currentLifecycleStage === nextLifecycleStage);
     }
@@ -152,19 +158,25 @@ export default function CustomersPage() {
 
   const handleSearch = (value: string) => {
     setSearchText(value);
-    applyFilters(customers, value, selectedLifecycleStage, selectedFollowupStage);
+    applyFilters(customers, value, selectedLeadType, selectedLifecycleStage, selectedFollowupStage);
+  };
+
+  const handleLeadTypeFilter = (value: 'review' | 'nps' | 'feedback' | null) => {
+    const nextValue = value ?? null;
+    setSelectedLeadType(nextValue);
+    applyFilters(customers, searchText, nextValue, selectedLifecycleStage, selectedFollowupStage);
   };
 
   const handleLifecycleFilter = (value: string | null) => {
     const nextValue = value ?? null;
     setSelectedLifecycleStage(nextValue);
-    applyFilters(customers, searchText, nextValue, selectedFollowupStage);
+    applyFilters(customers, searchText, selectedLeadType, nextValue, selectedFollowupStage);
   };
 
   const handleFollowupFilter = (value: number | null) => {
     const nextValue = value ?? null;
     setSelectedFollowupStage(nextValue);
-    applyFilters(customers, searchText, selectedLifecycleStage, nextValue);
+    applyFilters(customers, searchText, selectedLeadType, selectedLifecycleStage, nextValue);
   };
 
   const handleRowClick = async (customerId: string) => {
@@ -332,6 +344,18 @@ export default function CustomersPage() {
         allowClear
       />
       <Space wrap style={{ marginBottom: 16 }}>
+        <Select
+          placeholder="Filter by Lead Type"
+          allowClear
+          style={{ width: 200 }}
+          value={selectedLeadType}
+          onChange={handleLeadTypeFilter}
+          options={[
+            { label: 'Review', value: 'review' },
+            { label: 'NPS', value: 'nps' },
+            { label: 'Feedback', value: 'feedback' },
+          ]}
+        />
         <Select
           placeholder="Filter by Lifecycle Stage"
           allowClear

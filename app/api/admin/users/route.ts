@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, asc, eq, ilike, or } from 'drizzle-orm';
+import { getCrmBrandFromCookie } from '@/lib/crmBrand';
+import type { CrmBrand } from '@/lib/crmBrand.shared';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { users } from '@/lib/db/schema';
+import { users, userBrandProfiles } from '@/lib/db/schema';
 import { hashPassword } from '@/lib/auth/jwt';
+import { ensureDefaultProfilesForDt } from '@/lib/services/dtBrandProfileService';
 
 function validateRole(role: string) {
   return role === 'admin' || role === 'dt';
+}
+
+function parseBrandParam(value: string | null, fallback: CrmBrand): CrmBrand {
+  if (value === 'fitty' || value === 'fitelo') return value;
+  return fallback;
 }
 
 export async function GET(request: NextRequest) {
@@ -18,6 +26,8 @@ export async function GET(request: NextRequest) {
   const role = sp.get('role');
   const status = sp.get('status');
   const q = sp.get('q')?.trim();
+  const cookieBrand = await getCrmBrandFromCookie();
+  const brand = parseBrandParam(sp.get('brand'), cookieBrand);
 
   const filters = [];
   if (role && validateRole(role)) filters.push(eq(users.role, role));
@@ -36,12 +46,36 @@ export async function GET(request: NextRequest) {
       active_status: users.active_status,
       created_at: users.created_at,
       updated_at: users.updated_at,
+      brand_is_active: userBrandProfiles.is_active,
+      brand_eligible_lead_types: userBrandProfiles.eligible_lead_types,
     })
     .from(users)
+    .leftJoin(
+      userBrandProfiles,
+      and(eq(userBrandProfiles.user_id, users.id), eq(userBrandProfiles.brand, brand))
+    )
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(asc(users.name));
 
-  return NextResponse.json({ data: rows });
+  const data = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    active_status: row.active_status,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    brand_profile:
+      row.role === 'dt'
+        ? {
+            brand,
+            is_active: row.brand_is_active ?? true,
+            eligible_lead_types: row.brand_eligible_lead_types ?? ['review'],
+          }
+        : null,
+  }));
+
+  return NextResponse.json({ data, brand });
 }
 
 export async function POST(request: NextRequest) {
@@ -88,6 +122,10 @@ export async function POST(request: NextRequest) {
         role: users.role,
         active_status: users.active_status,
       });
+
+    if (created.role === 'dt') {
+      await ensureDefaultProfilesForDt(created.id);
+    }
 
     return NextResponse.json({ data: created }, { status: 201 });
   } catch (error) {

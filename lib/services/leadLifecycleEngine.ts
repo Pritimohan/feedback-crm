@@ -28,7 +28,8 @@ import {
   scheduleNextFollowupFromConnected,
 } from '@/lib/lifecycle/leadLifecycleSchedule';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
-import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
+import { getMaxFollowupNumber, MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
+import type { LeadType } from '@/lib/lifecycle/leadLifecycleValidation';
 import {
   filterVisibleActiveFollowups,
   getTodayBoundsForFeedbackFollowups,
@@ -50,9 +51,10 @@ function endOfDay(date: Date): Date {
 export function shouldAdvanceIssueWithProduct(params: {
   hasIssueAdvancedOnce: boolean;
   followupNumber: number;
+  leadType?: LeadType;
 }): boolean {
-  const { hasIssueAdvancedOnce, followupNumber } = params;
-  return !hasIssueAdvancedOnce && followupNumber < MAX_FOLLOWUP_NUMBER;
+  const { hasIssueAdvancedOnce, followupNumber, leadType = 'review' } = params;
+  return !hasIssueAdvancedOnce && followupNumber < getMaxFollowupNumber(leadType);
 }
 
 export async function createLifecycleForLead(params: {
@@ -312,7 +314,10 @@ export async function recordConnectedOutcome(params: {
   if (!row) throw new Error('Followup not found');
   if (row.followup.status !== 'pending') throw new Error('Followup is not pending');
 
-  const allowedChoices = getConnectedChoicesForStage(row.followup.followup_number);
+  const leadType = row.lead.lead_type;
+  const maxFollowupNumber = getMaxFollowupNumber(leadType);
+
+  const allowedChoices = getConnectedChoicesForStage(row.followup.followup_number, leadType);
   if (!allowedChoices.includes(choice)) {
     throw new Error('Connected choice is not allowed for this followup stage');
   }
@@ -320,13 +325,14 @@ export async function recordConnectedOutcome(params: {
   const validation = validateConnectedChoicePayload({
     choice,
     followupNumber: row.followup.followup_number,
+    leadType,
     payload,
   });
   if (!validation.valid) {
     throw new Error(validation.reason);
   }
 
-  if (choice === 'interested' && !canChooseInterested(row.followup.followup_number)) {
+  if (choice === 'interested' && !canChooseInterested(row.followup.followup_number, leadType)) {
     throw new Error('Interested is not allowed for this stage');
   }
 
@@ -407,21 +413,22 @@ export async function recordConnectedOutcome(params: {
       })
       .where(eq(leadLifecycleFollowups.id, followupId));
 
-    const baseTransition = computeConnectedTransition(choice);
+    const baseTransition = computeConnectedTransition(choice, leadType);
     const transition =
       choice === 'issue_with_product' &&
       shouldAdvanceIssueWithProduct({
         hasIssueAdvancedOnce,
         followupNumber: row.followup.followup_number,
+        leadType,
       })
         ? { nextActivityStatus: 'active' as const, advanceStage: true }
         : baseTransition;
     const nextFollowupNumber = transition.advanceStage
-      ? Math.min(row.followup.followup_number + 1, MAX_FOLLOWUP_NUMBER)
+      ? Math.min(row.followup.followup_number + 1, maxFollowupNumber)
       : row.followup.followup_number;
 
     let nextFollowupId: string | null = null;
-    if (transition.advanceStage && row.followup.followup_number < MAX_FOLLOWUP_NUMBER) {
+    if (transition.advanceStage && row.followup.followup_number < maxFollowupNumber) {
       const insertedFollowupNumber = row.followup.followup_number + 1;
       const [nextFollowup] = await tx
         .insert(leadLifecycleFollowups)
@@ -448,7 +455,7 @@ export async function recordConnectedOutcome(params: {
     }
 
     const lifecycleIsCompleted =
-      !transition.advanceStage || row.followup.followup_number >= MAX_FOLLOWUP_NUMBER;
+      !transition.advanceStage || row.followup.followup_number >= maxFollowupNumber;
     await tx
       .update(leadLifecycles)
       .set({
@@ -519,7 +526,7 @@ export async function getActiveFollowupsForDt(dtId: string, date: Date = new Dat
   const enriched = rows.map((r) => ({
     ...r,
     objective: getCallObjective(r.lead.lead_type, r.followup.followup_number),
-    available_connected_choices: getConnectedChoicesForStage(r.followup.followup_number),
+    available_connected_choices: getConnectedChoicesForStage(r.followup.followup_number, r.lead.lead_type),
   }));
 
   const visible = filterVisibleActiveFollowups(enriched, now, dayBounds);

@@ -1,19 +1,28 @@
 import { db } from '@/lib/db';
-import { users, leads, leadLifecycles, leadLifecycleFollowups } from '@/lib/db/schema';
-import { and, eq, lte, sql, isNotNull } from 'drizzle-orm';
+import { leads, leadLifecycles, leadLifecycleFollowups } from '@/lib/db/schema';
+import { and, eq, lte, isNotNull } from 'drizzle-orm';
+import type { CrmBrand } from '@/lib/crmBrand.shared';
 import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
+import type { LeadType } from '@/lib/lifecycle/leadLifecycleValidation';
 import {
   classifyRebalanceFollowup,
   dueBucketFromScheduled,
   type RebalanceBucket,
   type DueBucket,
 } from '@/lib/rebalance/classifyFollowup';
-import type { RebalanceDtRow, RebalanceConfig, PoolSummary } from '@/lib/rebalance/rebalanceDistribution.types';
+import type { RebalanceDtRow, RebalanceConfig } from '@/lib/rebalance/rebalanceDistribution.types';
 import { summarizeClassifiedRows } from '@/lib/rebalance/summarizePool';
 import {
   buildStage0PlanFromPercentages,
   buildPlannedTargetsFromStage0Targets,
 } from '@/lib/rebalance/rebalancePlanning';
+import {
+  getBrandActiveDietitians,
+  getEligibleDtIdsByLeadTypeMap,
+  pickEligibleTargetDt,
+  ALL_LEAD_TYPES,
+  getEligibleDtIdSet,
+} from '@/lib/services/dtBrandProfileService';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -30,6 +39,7 @@ function endOfDay(date: Date): Date {
 export interface ClassifiedFollowupRow {
   followupId: string;
   leadId: string;
+  leadType: LeadType;
   followupNumber: number;
   ownerDtId: string | null;
   lifecycleStatus: string;
@@ -39,18 +49,19 @@ export interface ClassifiedFollowupRow {
   currentDtId: string | null;
 }
 
-/** UI counts: active lifecycle + active lead + owner on an active agent. */
+/** UI counts: active lifecycle + active lead + owner brand-active and eligible for lead type. */
 export function filterRowsForUiCounts(
   rows: ClassifiedFollowupRow[],
-  activeDtIdSet: Set<string>
+  activeDtIdSet: Set<string>,
+  eligibleDtIdsByLeadType: Map<LeadType, Set<string>>
 ): ClassifiedFollowupRow[] {
-  return rows.filter(
-    (r) =>
-      r.lifecycleStatus === 'active' &&
-      r.leadActivityStatus === 'active' &&
-      r.ownerDtId != null &&
-      activeDtIdSet.has(r.ownerDtId)
-  );
+  return rows.filter((r) => {
+    if (r.lifecycleStatus !== 'active' || r.leadActivityStatus !== 'active' || r.ownerDtId == null) {
+      return false;
+    }
+    if (!activeDtIdSet.has(r.ownerDtId)) return false;
+    return eligibleDtIdsByLeadType.get(r.leadType)?.has(r.ownerDtId) ?? false;
+  });
 }
 
 export interface RebalanceExecuteResult {
@@ -103,19 +114,25 @@ function dedupeEligibleByLead(rows: ClassifiedFollowupRow[]): ClassifiedFollowup
   return out;
 }
 
-export async function getActiveDietitians() {
-  return db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-    })
-    .from(users)
-    .where(and(eq(users.role, 'dt'), eq(users.active_status, true)))
-    .orderBy(users.id);
+export async function getActiveDietitians(brand?: CrmBrand) {
+  const resolvedBrand = brand ?? (await getCrmBrandFromCookie());
+  return getBrandActiveDietitians(resolvedBrand);
 }
 
-async function fetchClassifiedFollowups(brand: Awaited<ReturnType<typeof getCrmBrandFromCookie>>): Promise<ClassifiedFollowupRow[]> {
+async function buildEligibleDtIdsByLeadType(brand: CrmBrand): Promise<Map<LeadType, Set<string>>> {
+  return getEligibleDtIdsByLeadTypeMap(brand);
+}
+
+function pickEligibleTargetDtLocal(
+  preferredDtId: string | undefined,
+  leadType: LeadType,
+  activeDtIds: string[],
+  eligibleDtIdsByLeadType: Map<LeadType, Set<string>>
+): string | null {
+  return pickEligibleTargetDt(preferredDtId, leadType, activeDtIds, eligibleDtIdsByLeadType);
+}
+
+async function fetchClassifiedFollowups(brand: CrmBrand): Promise<ClassifiedFollowupRow[]> {
   const dayStart = startOfDay(new Date());
   const dayEnd = endOfDay(new Date());
 
@@ -128,6 +145,7 @@ async function fetchClassifiedFollowups(brand: Awaited<ReturnType<typeof getCrmB
       followupAssignedDtId: leadLifecycleFollowups.assigned_dt_id,
       lifecycleStatus: leadLifecycles.status,
       leadId: leads.id,
+      leadType: leads.lead_type,
       leadAssignedDtId: leads.assigned_dt_id,
       leadActivityStatus: leads.activity_status,
     })
@@ -155,6 +173,7 @@ async function fetchClassifiedFollowups(brand: Awaited<ReturnType<typeof getCrmB
     return {
       followupId: r.followupId,
       leadId: r.leadId,
+      leadType: r.leadType as LeadType,
       followupNumber: r.followupNumber,
       ownerDtId,
       lifecycleStatus: r.lifecycleStatus,
@@ -168,13 +187,14 @@ async function fetchClassifiedFollowups(brand: Awaited<ReturnType<typeof getCrmB
 
 export async function getRebalancePreviewData() {
   const brand = await getCrmBrandFromCookie();
-  const activeDTs = await getActiveDietitians();
+  const activeDTs = await getActiveDietitians(brand);
   const activeDtIds = activeDTs.map((d) => d.id);
   const activeDtIdSet = new Set(activeDtIds);
   const dtNames = new Map(activeDTs.map((d) => [d.id, d.name]));
+  const eligibleDtIdsByLeadType = await buildEligibleDtIdsByLeadType(brand);
 
   const classified = await fetchClassifiedFollowups(brand);
-  const uiRows = filterRowsForUiCounts(classified, activeDtIdSet);
+  const uiRows = filterRowsForUiCounts(classified, activeDtIdSet, eligibleDtIdsByLeadType);
   const dts = aggregateCountsByDt(uiRows, activeDtIds, dtNames);
   const poolSummary = summarizeClassifiedRows(uiRows, activeDtIdSet);
 
@@ -197,7 +217,8 @@ export async function getRebalancePreviewData() {
 async function executeRebalance(
   activeDtIds: string[],
   percentages: Map<string, number>,
-  classified: ClassifiedFollowupRow[]
+  classified: ClassifiedFollowupRow[],
+  eligibleDtIdsByLeadType: Map<LeadType, Set<string>>
 ): Promise<{ leadsReassigned: number; followupsReassigned: number }> {
   const locked = classified.filter((r) => r.bucket === 'locked');
   const eligible = dedupeEligibleByLead(classified.filter((r) => r.bucket === 'reassignable'));
@@ -229,7 +250,8 @@ async function executeRebalance(
 
   for (let i = 0; i < eligible.length; i++) {
     const row = eligible[i];
-    const targetDtId = plannedTargets[i];
+    const plannedTarget = plannedTargets[i];
+    const targetDtId = pickEligibleTargetDtLocal(plannedTarget, row.leadType, activeDtIds, eligibleDtIdsByLeadType);
     const current = row.currentDtId;
     if (!targetDtId || current === targetDtId) continue;
 
@@ -255,7 +277,8 @@ async function executeRebalance(
 export async function rebalanceByPercentages(
   percentagesInput: { dtId: string; percentage: number }[]
 ): Promise<RebalanceExecuteResult> {
-  const activeDTs = await getActiveDietitians();
+  const brand = await getCrmBrandFromCookie();
+  const activeDTs = await getActiveDietitians(brand);
   if (activeDTs.length === 0) {
     return {
       success: false,
@@ -287,14 +310,15 @@ export async function rebalanceByPercentages(
     }
   }
 
-  const brand = await getCrmBrandFromCookie();
   const classified = await fetchClassifiedFollowups(brand);
+  const eligibleDtIdsByLeadType = await buildEligibleDtIdsByLeadType(brand);
   const percentages = new Map(percentagesInput.map((p) => [p.dtId, p.percentage]));
 
   const { leadsReassigned, followupsReassigned } = await executeRebalance(
     activeDtIds,
     percentages,
-    classified
+    classified,
+    eligibleDtIdsByLeadType
   );
 
   return {

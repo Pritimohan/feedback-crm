@@ -22,8 +22,10 @@ import {
 import {
   dedupedAttemptsCte,
   sqlBrandCond,
+  sqlBrandActiveProfileExists,
   sqlConnectedFollowupFilters,
 } from '@/lib/analytics/uniqueAttemptsSql';
+import { userBrandProfiles } from '@/lib/db/schema';
 
 export async function GET(request: NextRequest) {
   try {
@@ -80,6 +82,12 @@ export async function GET(request: NextRequest) {
             AND fa.attempt_date <= ${endIso}::timestamp
         )`
       )
+    );
+
+    const brandProfileJoin = and(
+      eq(userBrandProfiles.user_id, users.id),
+      eq(userBrandProfiles.brand, brand),
+      eq(userBrandProfiles.is_active, true)
     );
 
     const baseJoin = and(
@@ -156,6 +164,7 @@ export async function GET(request: NextRequest) {
         .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
         .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
         .innerJoin(users, eq(leads.assigned_dt_id, users.id))
+        .innerJoin(userBrandProfiles, brandProfileJoin)
         .where(
           and(
             eq(leadLifecycleFollowups.followup_number, followupNumber),
@@ -189,6 +198,7 @@ export async function GET(request: NextRequest) {
         .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
         .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
         .innerJoin(users, eq(leads.assigned_dt_id, users.id))
+        .innerJoin(userBrandProfiles, brandProfileJoin)
         .where(freshLeadsWhere);
       const freshLeadCount = freshLeadsResult[0]?.count || 0;
 
@@ -214,6 +224,7 @@ export async function GET(request: NextRequest) {
         .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
         .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
         .innerJoin(users, eq(leads.assigned_dt_id, users.id))
+        .innerJoin(userBrandProfiles, brandProfileJoin)
         .where(rescheduledLeadsWhere);
       const rescheduledLeadCount = rescheduledLeadsResult[0]?.count || 0;
 
@@ -460,6 +471,7 @@ export async function GET(request: NextRequest) {
         .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
         .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
         .innerJoin(users, eq(leads.assigned_dt_id, users.id))
+        .innerJoin(userBrandProfiles, brandProfileJoin)
         .where(activityWhere),
       db.execute(sql`
         WITH ${dedupedAttemptsCte(activityCteOpts)}
@@ -496,6 +508,7 @@ export async function GET(request: NextRequest) {
           AND l.assigned_dt_id IS NOT NULL
           AND u.role = 'dt'
           AND u.active_status = true
+          ${sqlBrandActiveProfileExists('u', brand)}
           ${brandCond}
           AND (
             (lf.attempt_count = 0 AND lf.scheduled_date >= ${startIso}::timestamp AND lf.scheduled_date <= ${endIso}::timestamp)

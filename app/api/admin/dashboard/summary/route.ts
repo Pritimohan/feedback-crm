@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { callLogs, leadLifecycleFollowups, leadLifecycles, leads, users } from '@/lib/db/schema';
 import { getDtLoadDistribution } from '@/lib/services/callDistributionService';
+import { getBrandActiveDietitians } from '@/lib/services/dtBrandProfileService';
 
 export async function GET() {
   const session = await getSession();
@@ -12,6 +13,7 @@ export async function GET() {
   if (session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const brand = await getCrmBrandFromCookie();
+  const brandActiveDts = await getBrandActiveDietitians(brand);
 
   const [customerCounts, leadCounts, callCounts, dtCounts, pendingFollowups, connectedCalls] =
     await Promise.all([
@@ -76,7 +78,7 @@ export async function GET() {
       },
       dt: {
         total: Number(dtCounts[0]?.totalDt ?? 0),
-        active: Number(dtCounts[0]?.activeDt ?? 0),
+        active: brandActiveDts.length,
       },
       followups: {
         pending: Number(pendingFollowups[0]?.total ?? 0),
