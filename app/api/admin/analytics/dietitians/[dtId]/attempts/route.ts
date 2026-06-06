@@ -71,7 +71,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ dtI
       .where(
         and(
           eq(leadLifecycleFollowupAttempts.dt_id, dtId),
-          eq(leadLifecycles.status, 'active'),
           leadMatchesCrmBrand(brand),
           gte(leadLifecycleFollowupAttempts.attempt_date, startDate),
           lte(leadLifecycleFollowupAttempts.attempt_date, endDate)

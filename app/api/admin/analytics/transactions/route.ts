@@ -88,8 +88,6 @@ export async function GET(request: NextRequest) {
       .innerJoin(users, eq(leadLifecycleFollowupAttempts.dt_id, users.id))
       .where(
         and(
-          eq(leadLifecycles.status, 'active'),
-          eq(leads.activity_status, 'active'),
           leadMatchesCrmBrand(brand),
           gte(leadLifecycleFollowupAttempts.attempt_date, startDate),
           lte(leadLifecycleFollowupAttempts.attempt_date, endDate)

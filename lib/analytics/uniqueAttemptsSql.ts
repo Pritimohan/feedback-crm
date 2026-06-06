@@ -15,7 +15,7 @@ export function sqlBrandCond(brand: string | null | undefined): SQL {
 /** Agent is globally active and brand-active in user_brand_profiles. */
 export function sqlBrandActiveProfileExists(userTableAlias = 'u', brand?: string | null | undefined): SQL {
   const b = brand === 'fitelo' ? 'fitelo' : 'fitty';
-  return sql`EXISTS (
+  return sql`AND EXISTS (
     SELECT 1 FROM user_brand_profiles ubp
     WHERE ubp.user_id = ${sql.raw(userTableAlias)}.id
       AND ubp.brand = ${b}
@@ -79,6 +79,8 @@ export interface DedupedAttemptsCteOptions {
  * Reusable CTE chain:
  * attempts_base → attempts_ranked → attempts_deduped (last attempt per partition per IST day)
  * connected_customer_days (any connected wins per customer-day)
+ *
+ * Attempt rows include all leads/lifecycles (active or not); only brand and agent filters apply.
  */
 export function dedupedAttemptsCte(opts: DedupedAttemptsCteOptions): SQL {
   const { startIso, endIso, brand, followupNumber, partition, withLeadPoolFilter } = opts;
@@ -122,9 +124,7 @@ export function dedupedAttemptsCte(opts: DedupedAttemptsCteOptions): SQL {
       INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
       INNER JOIN leads l ON ol.lead_id = l.id
       INNER JOIN users u ON l.assigned_dt_id = u.id
-      WHERE ol.status = 'active'
-        AND l.activity_status = 'active'
-        AND l.assigned_dt_id IS NOT NULL
+      WHERE l.assigned_dt_id IS NOT NULL
         AND u.role = 'dt'
         AND u.active_status = true
         ${sqlBrandActiveProfileExists('u', brand)}

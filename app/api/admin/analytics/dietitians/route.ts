@@ -95,19 +95,27 @@ export async function GET(request: NextRequest) {
           fa.dt_id,
           fa.outcome,
           fa.attempt_date,
-          lp.followup_number,
-          lp.assigned_dt_id,
-          lp.first_attempt_date,
-          lp.scheduled_date,
+          lf.followup_number,
+          l.assigned_dt_id,
+          lf.first_attempt_date,
+          lf.scheduled_date,
           l.id AS lead_id,
           l.customer_id,
           date_trunc('day', fa.attempt_date AT TIME ZONE ${ANALYTICS_TIMEZONE}) AS attempt_day_ist
         FROM lead_lifecycle_followup_attempts fa
-        INNER JOIN lead_pool lp ON fa.followup_id = lp.followup_id
-        INNER JOIN lead_lifecycle_followups lf ON lf.id = lp.followup_id
+        INNER JOIN lead_lifecycle_followups lf ON fa.followup_id = lf.id
         INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
         INNER JOIN leads l ON ol.lead_id = l.id
+        INNER JOIN users u_att ON fa.dt_id = u_att.id AND u_att.role = 'dt' AND u_att.active_status = true
+          AND EXISTS (
+            SELECT 1 FROM user_brand_profiles ubp
+            WHERE ubp.user_id = u_att.id
+              AND ubp.brand = ${brand === 'fitelo' ? sql`'fitelo'` : sql`'fitty'`}
+              AND ubp.is_active = true
+          )
         WHERE fa.attempt_date >= ${startStr}::timestamp AND fa.attempt_date <= ${endStr}::timestamp
+          AND l.assigned_dt_id IS NOT NULL
+          ${leadBrandCond}
       ),
       connected_dt_days AS (
         SELECT DISTINCT dt_id, customer_id, attempt_day_ist
