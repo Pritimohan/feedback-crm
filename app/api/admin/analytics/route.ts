@@ -444,8 +444,8 @@ export async function GET(request: NextRequest) {
     const thirdFollowup = mergeSection(thirdFollowupBase, thirdFollowupConv);
 
     const activityWhere = and(
-      eq(leadLifecycles.status, 'active'),
-      activeLeadFilter,
+      isNotNull(leads.assigned_dt_id),
+      leadMatchesCrmBrand(brand),
       eq(users.role, 'dt'),
       eq(users.active_status, true),
       gte(leadLifecycleFollowupAttempts.attempt_date, startDate),

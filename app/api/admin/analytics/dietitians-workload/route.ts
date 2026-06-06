@@ -3,7 +3,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
-import { and, eq, ne, gte, lte, lt, sql, isNotNull, gt, or, isNull } from 'drizzle-orm';
+import { and, eq, ne, gte, lte, lt, sql, isNotNull, gt, or } from 'drizzle-orm';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { getBrandActiveDietitians } from '@/lib/services/dtBrandProfileService';
@@ -186,8 +186,6 @@ export async function GET(request: NextRequest) {
     }
 
     const attemptDayWhere = and(
-      eq(leadLifecycles.status, 'active'),
-      eq(leads.activity_status, 'active'),
       leadMatchesCrmBrand(brand),
       gte(leadLifecycleFollowupAttempts.attempt_date, dayStart),
       lte(leadLifecycleFollowupAttempts.attempt_date, dayEnd)
@@ -222,8 +220,7 @@ export async function GET(request: NextRequest) {
     const callLogDayFilter = and(
       gte(callLogs.created_at, dayStart),
       lte(callLogs.created_at, dayEnd),
-      eq(leads.activity_status, 'active'),
-      or(isNull(callLogs.lifecycle_id), eq(leadLifecycles.status, 'active'))
+      leadMatchesCrmBrand(brand)
     );
 
     const callLogAggRows = await db
