@@ -15,7 +15,7 @@ export function sqlBrandCond(brand: string | null | undefined): SQL {
 /** Agent is globally active and brand-active in user_brand_profiles. */
 export function sqlBrandActiveProfileExists(userTableAlias = 'u', brand?: string | null | undefined): SQL {
   const b = brand === 'fitelo' ? 'fitelo' : 'fitty';
-  return sql`EXISTS (
+  return sql`AND EXISTS (
     SELECT 1 FROM user_brand_profiles ubp
     WHERE ubp.user_id = ${sql.raw(userTableAlias)}.id
       AND ubp.brand = ${b}
