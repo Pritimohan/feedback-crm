@@ -10,6 +10,7 @@ import {
   LogoutOutlined,
   CrownOutlined,
   PieChartOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 import { UserProfileDropdown } from '@/components/layout/UserProfileDropdown';
 import { BrandSwitcher } from '@/components/layout/BrandSwitcher';
@@ -64,6 +65,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       key: '/admin/customers',
       icon: <TeamOutlined />,
       label: 'All Customers',
+    },
+    {
+      key: '/admin/data-import',
+      icon: <UploadOutlined />,
+      label: 'Data Import',
     },
   ];
   const selectedKey = pathname;
