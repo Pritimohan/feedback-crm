@@ -22,6 +22,12 @@ import {
 import { CheckCircleOutlined, CloseCircleOutlined, MailOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import CallButton from '@/components/dt/CallButton';
+import { FeedbackConnectedForm } from '@/components/dt/FeedbackConnectedForm';
+import {
+  formatFeedbackFormForDisplay,
+  sanitizeFeedbackFormPayload,
+  type FeedbackFormData,
+} from '@/lib/feedback/feedbackFormSchema';
 import { getConnectedChoicesForStage } from '@/lib/lifecycle/leadLifecycleValidation';
 import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
@@ -57,6 +63,14 @@ function renderPreviousInteractionContent(remarks: string | null, payload: unkno
     addTextRow('didnt_feedback_remark', "Didn't Feedback Remark", payloadObj?.didnt_reviewed_remark);
   } else {
     addTextRow('didnt_reviewed_remark', "Didn't Review Remark", payloadObj?.didnt_reviewed_remark);
+  }
+
+  const feedbackFormRaw = payloadObj?.feedback_form;
+  if (feedbackFormRaw && typeof feedbackFormRaw === 'object') {
+    const feedbackRows = formatFeedbackFormForDisplay(sanitizeFeedbackFormPayload(feedbackFormRaw));
+    for (const row of feedbackRows) {
+      addTextRow(`feedback_${row.label}`, row.label, row.value);
+    }
   }
 
   const screenshotUrl = typeof payloadObj?.review_screenshot_url === 'string' ? payloadObj.review_screenshot_url.trim() : '';
@@ -184,6 +198,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   const [isTestimonial, setIsTestimonial] = useState(false);
   const [dontReviewedRemark, setDontReviewedRemark] = useState('');
   const [interestedRemark, setInterestedRemark] = useState('');
+  const [feedbackForm, setFeedbackForm] = useState<FeedbackFormData>({});
   const { message } = App.useApp();
 
   useEffect(() => {
@@ -205,6 +220,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         setIsTestimonial(false);
         setDontReviewedRemark('');
         setInterestedRemark('');
+        setFeedbackForm({});
       } catch (error: unknown) {
         message.error(error instanceof Error ? error.message : 'Failed to load followup details');
       } finally {
@@ -277,7 +293,14 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       setSubmitting(true);
       let uploadedReviewScreenshotPath = reviewScreenshotUrl || '';
 
-      if ((connectedChoice === 'reviewed' || connectedChoice === 'feedbacked') && reviewScreenshotFile) {
+      const isFeedbackLead = details?.lead.lead_type === 'feedback';
+      const isFeedbackedOutcome = connectedChoice === 'feedbacked';
+
+      if (
+        !isFeedbackLead &&
+        connectedChoice === 'reviewed' &&
+        reviewScreenshotFile
+      ) {
         setUploadingReviewScreenshot(true);
         const formData = new FormData();
         formData.append('file', reviewScreenshotFile);
@@ -298,14 +321,23 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         setReviewScreenshotFile(null);
       }
 
-      const payload: Record<string, unknown> = {
-        review_screenshot_url: uploadedReviewScreenshotPath || undefined,
-        review_remark: reviewRemark || undefined,
-        is_testimonial: isTestimonial,
-        issue_description: issueDescription || undefined,
-        interested_remark: interestedRemark || undefined,
-        didnt_reviewed_remark: dontReviewedRemark || undefined,
-      };
+      const payload: Record<string, unknown> = isFeedbackLead
+        ? isFeedbackedOutcome
+          ? {
+              feedback_form: feedbackForm,
+              is_testimonial: feedbackForm.testimonial_comfortable === 'Yes',
+            }
+          : {
+              didnt_reviewed_remark: dontReviewedRemark || undefined,
+            }
+        : {
+            review_screenshot_url: uploadedReviewScreenshotPath || undefined,
+            review_remark: reviewRemark || undefined,
+            is_testimonial: isTestimonial,
+            issue_description: issueDescription || undefined,
+            interested_remark: interestedRemark || undefined,
+            didnt_reviewed_remark: dontReviewedRemark || undefined,
+          };
       const res = await fetch(`/api/dt/followups/${followupId}/connected`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -505,7 +537,16 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
                 style={{ width: 220 }}
               />
 
-              {connectedChoice === 'reviewed' || connectedChoice === 'feedbacked' ? (
+              {lead.lead_type === 'feedback' && connectedChoice === 'feedbacked' ? (
+                <FeedbackConnectedForm
+                  customerName={customer.name}
+                  customerPhone={customer.phone}
+                  value={feedbackForm}
+                  onChange={setFeedbackForm}
+                />
+              ) : null}
+
+              {lead.lead_type !== 'feedback' && connectedChoice === 'reviewed' ? (
                 <>
                   <Space direction="vertical" size="small" style={{ width: '100%' }}>
                     <input
@@ -529,7 +570,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
                         }}
                         loading={uploadingReviewScreenshot || submitting}
                       >
-                        {connectedChoice === 'feedbacked' ? 'Choose feedback screenshot' : 'Choose review screenshot'}
+                        Choose review screenshot
                       </Button>
                       {reviewScreenshotFile || reviewScreenshotUrl ? (
                         <Button

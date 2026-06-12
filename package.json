@@ -21,7 +21,8 @@
     "test:dt-brand-profile": "tsx lib/services/run-dt-brand-profile-tests.ts",
     "dry-run:nightly-redistribute-stage0": "tsx scripts/dry-run-nightly-redistribute-stage0.ts",
     "test:followup-priority": "tsx lib/dt/run-feedback-priority-tests.ts",
-    "test:feedback-import": "tsx scripts/test-feedback-import.ts"
+    "test:feedback-import": "tsx scripts/test-feedback-import.ts",
+    "test:feedback-form": "tsx scripts/test-feedback-form-schema.ts"
   },
   "dependencies": {
     "@ant-design/nextjs-registry": "^1.3.0",

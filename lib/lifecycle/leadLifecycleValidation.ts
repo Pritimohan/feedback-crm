@@ -1,3 +1,4 @@
+import type { FeedbackFormData } from '@/lib/feedback/feedbackFormSchema';
 import { getMaxFollowupNumber, MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 
 export type LeadType = 'nps' | 'review' | 'feedback';
@@ -60,6 +61,7 @@ export interface ConnectedChoicePayload {
   issue_description?: string;
   interested_remark?: string;
   didnt_reviewed_remark?: string;
+  feedback_form?: FeedbackFormData;
 }
 
 export function validateConnectedChoicePayload(params: {

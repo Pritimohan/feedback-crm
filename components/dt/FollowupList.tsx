@@ -10,6 +10,11 @@ import {
   sortFeedbackActiveFollowupCalls,
 } from '@/lib/dt/activeFollowupsCallPriority';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
+import {
+  ACTIVE_FOLLOWUP_OUTCOME_FILTER_OPTIONS,
+  formatActiveFollowupOutcomeLabel,
+  matchesActiveFollowupOutcomeFilter,
+} from '@/lib/utils/activeFollowupOutcomeFilter';
 
 dayjs.extend(relativeTime);
 
@@ -27,7 +32,10 @@ interface FollowupRow {
   lead: {
     id: string;
     activity_status: string;
+    last_connected_choice?: string | null;
+    current_touch_status?: string | null;
   };
+  last_attempt_outcome?: string | null;
   customer: {
     id: string;
     name: string;
@@ -53,6 +61,7 @@ interface ActiveResponse {
 
 type FollowupNumberFilterKey = 'all' | '0' | '1' | '2' | '3' | '4';
 type AttemptFilterKey = 'all' | '0' | '1' | '2' | '3plus';
+type OutcomeFilterKey = string | 'all';
 
 const FOLLOWUP_FILTER_OPTIONS: { label: string; value: FollowupNumberFilterKey }[] = [
   { label: 'All follow-ups', value: 'all' },
@@ -82,6 +91,7 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
   const [loading, setLoading] = useState(true);
   const [followupFilter, setFollowupFilter] = useState<FollowupNumberFilterKey>('all');
   const [attemptFilter, setAttemptFilter] = useState<AttemptFilterKey>('all');
+  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilterKey>('all');
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -134,15 +144,21 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
     return items.filter((item) => Number(item.followup.attempt_count) === n);
   };
 
+  const filterByOutcome = (items: FollowupRow[]) => {
+    if (outcomeFilter === 'all') return items;
+    return items.filter((item) => matchesActiveFollowupOutcomeFilter(item, outcomeFilter));
+  };
+
   const filteredSortedCalls = useMemo(() => {
     const visible = filterVisibleActiveFollowups(calls, currentTime, dayBounds);
     const byFollowup = filterByFollowupNumber(visible);
-    const filtered = filterByAttemptCount(byFollowup);
+    const byAttempt = filterByAttemptCount(byFollowup);
+    const filtered = filterByOutcome(byAttempt);
     return sortFeedbackActiveFollowupCalls(filtered, {
       now: currentTime,
       dayBounds,
     });
-  }, [calls, currentTime, followupFilter, attemptFilter, dayBounds]);
+  }, [calls, currentTime, followupFilter, attemptFilter, outcomeFilter, dayBounds]);
 
   const getFollowupBadge = (followupNumber: number) => {
     if (followupNumber === 0) {
@@ -183,6 +199,7 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
             <PhoneOutlined /> {item.customer.phone}
           </Text>
           <Text type="secondary">Attempts: {item.followup.attempt_count}</Text>
+          <Text type="secondary">Last outcome: {formatActiveFollowupOutcomeLabel(item)}</Text>
           <Text type="secondary">Objective: {item.objective}</Text>
         </Space>
 
@@ -199,7 +216,7 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
     return <Card loading />;
   }
 
-  const filtersActive = followupFilter !== 'all' || attemptFilter !== 'all';
+  const filtersActive = followupFilter !== 'all' || attemptFilter !== 'all' || outcomeFilter !== 'all';
 
   return (
     <Space orientation="vertical" size="large" style={{ width: '100%' }}>
@@ -227,6 +244,22 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
             options={ATTEMPT_FILTER_OPTIONS}
             className="crm-select"
             popupClassName="crm-select-dropdown"
+          />
+        </Space>
+        <Space align="center" size={8}>
+          <Text type="secondary">Call outcome</Text>
+          <Select
+            value={outcomeFilter}
+            onChange={(value) => setOutcomeFilter((value ?? 'all') as OutcomeFilterKey)}
+            style={{ width: 220 }}
+            options={[
+              { label: 'All outcomes', value: 'all' },
+              ...ACTIVE_FOLLOWUP_OUTCOME_FILTER_OPTIONS,
+            ]}
+            className="crm-select"
+            popupClassName="crm-select-dropdown"
+            allowClear
+            onClear={() => setOutcomeFilter('all')}
           />
         </Space>
       </Space>
