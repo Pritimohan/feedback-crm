@@ -26,7 +26,15 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import FollowupModal from '@/components/dt/FollowupModal';
+import {
+  formatFeedbackFormForDisplay,
+  sanitizeFeedbackFormPayload,
+} from '@/lib/feedback/feedbackFormSchema';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
+import {
+  MARKETPLACE_FILTER_OPTIONS,
+  matchesMarketplaceFilter,
+} from '@/lib/utils/marketplaceSources';
 
 const { Title, Paragraph, Text } = Typography;
 const { Search } = Input;
@@ -96,6 +104,7 @@ export default function CustomersPage() {
   const [selectedLeadType, setSelectedLeadType] = useState<'review' | 'nps' | 'feedback' | null>(null);
   const [selectedLifecycleStage, setSelectedLifecycleStage] = useState<string | null>(null);
   const [selectedFollowupStage, setSelectedFollowupStage] = useState<number | null>(null);
+  const [selectedMarketplace, setSelectedMarketplace] = useState<string | null>(null);
   const [selectedFollowupId, setSelectedFollowupId] = useState<string | null>(null);
   const [followupModalVisible, setFollowupModalVisible] = useState(false);
   const [openingFollowupForCustomerId, setOpeningFollowupForCustomerId] = useState<string | null>(null);
@@ -109,7 +118,7 @@ export default function CustomersPage() {
       const data = await response.json();
       const nextRows = (data.customers || []) as Customer[];
       setCustomers(nextRows);
-      applyFilters(nextRows, searchText, selectedLeadType, selectedLifecycleStage, selectedFollowupStage);
+      applyFilters(nextRows, searchText, selectedLeadType, selectedLifecycleStage, selectedFollowupStage, selectedMarketplace);
     } catch (error) {
       console.error('Error fetching customers:', error);
       message.error('Failed to load customers');
@@ -127,7 +136,8 @@ export default function CustomersPage() {
     nextSearchText: string,
     nextLeadType: 'review' | 'nps' | 'feedback' | null,
     nextLifecycleStage: string | null,
-    nextFollowupStage: number | null
+    nextFollowupStage: number | null,
+    nextMarketplace: string | null
   ) => {
     let filtered = [...sourceRows];
     const text = nextSearchText.trim().toLowerCase();
@@ -153,30 +163,40 @@ export default function CustomersPage() {
       filtered = filtered.filter((customer) => customer.currentFollowupStage === nextFollowupStage);
     }
 
+    if (nextMarketplace) {
+      filtered = filtered.filter((customer) => matchesMarketplaceFilter(customer.source, nextMarketplace));
+    }
+
     setFilteredCustomers(filtered);
   };
 
   const handleSearch = (value: string) => {
     setSearchText(value);
-    applyFilters(customers, value, selectedLeadType, selectedLifecycleStage, selectedFollowupStage);
+    applyFilters(customers, value, selectedLeadType, selectedLifecycleStage, selectedFollowupStage, selectedMarketplace);
   };
 
   const handleLeadTypeFilter = (value: 'review' | 'nps' | 'feedback' | null) => {
     const nextValue = value ?? null;
     setSelectedLeadType(nextValue);
-    applyFilters(customers, searchText, nextValue, selectedLifecycleStage, selectedFollowupStage);
+    applyFilters(customers, searchText, nextValue, selectedLifecycleStage, selectedFollowupStage, selectedMarketplace);
+  };
+
+  const handleMarketplaceFilter = (value: string | null) => {
+    const nextValue = value ?? null;
+    setSelectedMarketplace(nextValue);
+    applyFilters(customers, searchText, selectedLeadType, selectedLifecycleStage, selectedFollowupStage, nextValue);
   };
 
   const handleLifecycleFilter = (value: string | null) => {
     const nextValue = value ?? null;
     setSelectedLifecycleStage(nextValue);
-    applyFilters(customers, searchText, selectedLeadType, nextValue, selectedFollowupStage);
+    applyFilters(customers, searchText, selectedLeadType, nextValue, selectedFollowupStage, selectedMarketplace);
   };
 
   const handleFollowupFilter = (value: number | null) => {
     const nextValue = value ?? null;
     setSelectedFollowupStage(nextValue);
-    applyFilters(customers, searchText, selectedLeadType, selectedLifecycleStage, nextValue);
+    applyFilters(customers, searchText, selectedLeadType, selectedLifecycleStage, nextValue, selectedMarketplace);
   };
 
   const handleRowClick = async (customerId: string) => {
@@ -357,6 +377,14 @@ export default function CustomersPage() {
           ]}
         />
         <Select
+          placeholder="Filter by Marketplace"
+          allowClear
+          style={{ width: 200 }}
+          value={selectedMarketplace}
+          onChange={handleMarketplaceFilter}
+          options={[...MARKETPLACE_FILTER_OPTIONS]}
+        />
+        <Select
           placeholder="Filter by Lifecycle Stage"
           allowClear
           style={{ width: 220 }}
@@ -453,9 +481,23 @@ export default function CustomersPage() {
                       if (typeof value === 'boolean' && value === false) return false;
                       return true;
                     });
+                    const feedbackFormRows =
+                      interaction.formData?.feedback_form &&
+                      typeof interaction.formData.feedback_form === 'object'
+                        ? formatFeedbackFormForDisplay(
+                            sanitizeFeedbackFormPayload(interaction.formData.feedback_form)
+                          )
+                        : [];
+
                     const filteredFormEntries = formEntries.filter(([key]) => {
                       const k = key.trim().toLowerCase();
-                      return k !== 'objective' && k !== 'escalated';
+                      return (
+                        k !== 'objective' &&
+                        k !== 'escalated' &&
+                        k !== 'feedback_form' &&
+                        k !== 'connected_choice' &&
+                        k !== 'issue_advanced_once'
+                      );
                     });
 
                     return {
@@ -476,8 +518,17 @@ export default function CustomersPage() {
                           {source ? <Tag color="#1d4838">Source: {source}</Tag> : null}
                         </Space>
                       ) : null}
-                          {interaction.outcome === 'connected' && filteredFormEntries.length > 0 ? (
+                          {interaction.outcome === 'connected' &&
+                          (filteredFormEntries.length > 0 || feedbackFormRows.length > 0) ? (
                             <div style={{ marginTop: 4, lineHeight: 1.6 }}>
+                              {feedbackFormRows.map((row) => (
+                                <div key={row.label} style={{ marginBottom: 2 }}>
+                                  <Text type="secondary" style={{ fontSize: 13 }}>
+                                    • {row.label}:
+                                  </Text>
+                                  <Text style={{ fontSize: 13 }}> {row.value}</Text>
+                                </div>
+                              ))}
                               {filteredFormEntries.map(([key, value]) => {
                                 const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, (s: string) => s.toUpperCase());
                                 const displayValue = Array.isArray(value) ? value.join(', ') : String(value);

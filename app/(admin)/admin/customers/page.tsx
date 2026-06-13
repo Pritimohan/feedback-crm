@@ -24,6 +24,10 @@ import { UserOutlined, PhoneOutlined, MailOutlined, EllipsisOutlined } from '@an
 import dayjs from 'dayjs';
 import FollowupModal from '@/components/dt/FollowupModal';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
+import {
+  MARKETPLACE_FILTER_OPTIONS,
+  matchesMarketplaceFilter,
+} from '@/lib/utils/marketplaceSources';
 
 const { Title, Paragraph, Text } = Typography;
 const { Search } = Input;
@@ -46,6 +50,7 @@ export default function AllCustomersPage() {
   const [selectedLifecycleStage, setSelectedLifecycleStage] = useState<string | null>(null);
   const [selectedFollowupStage, setSelectedFollowupStage] = useState<number | null>(null);
   const [selectedLeadType, setSelectedLeadType] = useState<'review' | 'nps' | 'feedback' | null>('review');
+  const [selectedMarketplace, setSelectedMarketplace] = useState<string | null>(null);
   const [selectedFollowupId, setSelectedFollowupId] = useState<string | null>(null);
   const [followupModalVisible, setFollowupModalVisible] = useState(false);
   const [openingFollowupForCustomerId, setOpeningFollowupForCustomerId] = useState<string | null>(null);
@@ -74,21 +79,32 @@ export default function AllCustomersPage() {
       const dtMap = new Map<string, DT>(); dtsData.forEach((dt: DT) => { dtMap.set(dt.id, dt); });
       const nextCustomers = customersData.customers || [];
       setCustomers(nextCustomers);
-      setFilteredCustomers(selectedLeadType ? nextCustomers.filter((c: Customer) => c.leadType === selectedLeadType) : nextCustomers);
+      let filtered = nextCustomers as Customer[];
+      if (selectedLeadType) filtered = filtered.filter((c) => c.leadType === selectedLeadType);
+      if (selectedMarketplace) filtered = filtered.filter((c) => matchesMarketplaceFilter(c.source, selectedMarketplace));
+      setFilteredCustomers(filtered);
       setDietitians(dtMap);
     } catch (error) {
       console.error('Error fetching data:', error); message.error('Failed to load data');
     } finally { setLoading(false); }
-  }, [message, selectedLeadType]);
+  }, [message, selectedLeadType, selectedMarketplace]);
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  const applyFilters = (search: string, dtId: string | null, stage: string | null, followupStage: number | null, leadType: 'review' | 'nps' | 'feedback' | null) => {
+  const applyFilters = (
+    search: string,
+    dtId: string | null,
+    stage: string | null,
+    followupStage: number | null,
+    leadType: 'review' | 'nps' | 'feedback' | null,
+    marketplace: string | null
+  ) => {
     let filtered = customers;
     if (search) filtered = filtered.filter((customer) => customer.name.toLowerCase().includes(search.toLowerCase()) || customer.phone.includes(search) || (customer.email && customer.email.toLowerCase().includes(search.toLowerCase())));
     if (dtId) filtered = filtered.filter((customer) => customer.assignedDtId === dtId);
     if (stage) filtered = filtered.filter((customer) => customer.currentLifecycleStage === stage);
     if (followupStage !== null) filtered = filtered.filter((customer) => customer.currentFollowupStage === followupStage);
     if (leadType) filtered = filtered.filter((customer) => customer.leadType === leadType);
+    if (marketplace) filtered = filtered.filter((customer) => matchesMarketplaceFilter(customer.source, marketplace));
     setFilteredCustomers(filtered);
   };
 
@@ -165,11 +181,12 @@ export default function AllCustomersPage() {
       <Title level={2}>All Customers</Title>
       <Paragraph type="secondary">View and manage all customers across all agents</Paragraph>
       <Space wrap style={{ marginBottom: 16 }}>
-        <Search placeholder="Search by name, phone, or email" onSearch={(v) => { setSearchText(v); applyFilters(v, selectedDietitianId, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} onChange={(e) => { const v = e.target.value; setSearchText(v); applyFilters(v, selectedDietitianId, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} style={{ width: 300 }} allowClear />
-        <Select placeholder="Filter by Lead Type" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedLeadType(next); setSelectedLifecycleStage(null); applyFilters(searchText, selectedDietitianId, null, selectedFollowupStage, next); }} value={selectedLeadType} options={[{ label: 'Review', value: 'review' }, { label: 'NPS', value: 'nps' }, { label: 'Feedback', value: 'feedback' }]} />
-        <Select placeholder="Filter by Agent" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedDietitianId(next); applyFilters(searchText, next, selectedLifecycleStage, selectedFollowupStage, selectedLeadType); }} value={selectedDietitianId} options={[...Array.from(dietitians.values()).map((dt) => ({ label: dt.name, value: dt.id }))]} />
-        <Select placeholder="Filter by Lifecycle Stage" allowClear style={{ width: 180 }} onChange={(v) => { const next = v ?? null; setSelectedLifecycleStage(next); applyFilters(searchText, selectedDietitianId, next, selectedFollowupStage, selectedLeadType); }} value={selectedLifecycleStage} options={LIFECYCLE_FILTER_OPTIONS} />
-        <Select placeholder="Filter by follow-up stage" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedFollowupStage(next); applyFilters(searchText, selectedDietitianId, selectedLifecycleStage, next, selectedLeadType); }} value={selectedFollowupStage} options={FOLLOWUP_STAGE_OPTIONS} />
+        <Search placeholder="Search by name, phone, or email" onSearch={(v) => { setSearchText(v); applyFilters(v, selectedDietitianId, selectedLifecycleStage, selectedFollowupStage, selectedLeadType, selectedMarketplace); }} onChange={(e) => { const v = e.target.value; setSearchText(v); applyFilters(v, selectedDietitianId, selectedLifecycleStage, selectedFollowupStage, selectedLeadType, selectedMarketplace); }} style={{ width: 300 }} allowClear />
+        <Select placeholder="Filter by Lead Type" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedLeadType(next); setSelectedLifecycleStage(null); applyFilters(searchText, selectedDietitianId, null, selectedFollowupStage, next, selectedMarketplace); }} value={selectedLeadType} options={[{ label: 'Review', value: 'review' }, { label: 'NPS', value: 'nps' }, { label: 'Feedback', value: 'feedback' }]} />
+        <Select placeholder="Filter by Marketplace" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedMarketplace(next); applyFilters(searchText, selectedDietitianId, selectedLifecycleStage, selectedFollowupStage, selectedLeadType, next); }} value={selectedMarketplace} options={[...MARKETPLACE_FILTER_OPTIONS]} />
+        <Select placeholder="Filter by Agent" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedDietitianId(next); applyFilters(searchText, next, selectedLifecycleStage, selectedFollowupStage, selectedLeadType, selectedMarketplace); }} value={selectedDietitianId} options={[...Array.from(dietitians.values()).map((dt) => ({ label: dt.name, value: dt.id }))]} />
+        <Select placeholder="Filter by Lifecycle Stage" allowClear style={{ width: 180 }} onChange={(v) => { const next = v ?? null; setSelectedLifecycleStage(next); applyFilters(searchText, selectedDietitianId, next, selectedFollowupStage, selectedLeadType, selectedMarketplace); }} value={selectedLifecycleStage} options={LIFECYCLE_FILTER_OPTIONS} />
+        <Select placeholder="Filter by follow-up stage" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedFollowupStage(next); applyFilters(searchText, selectedDietitianId, selectedLifecycleStage, next, selectedLeadType, selectedMarketplace); }} value={selectedFollowupStage} options={FOLLOWUP_STAGE_OPTIONS} />
       </Space>
       <Table columns={columns} dataSource={filteredCustomers} loading={loading} rowKey="id" onRow={(record) => ({ onClick: () => void handleRowClick(record.id), style: { cursor: 'pointer' } })} pagination={{ pageSize: 20, showTotal: (total) => `Total ${total} customers` }} />
       <Drawer title="Customer 360 View" placement="right" size={720} open={drawerVisible} onClose={() => setDrawerVisible(false)}>

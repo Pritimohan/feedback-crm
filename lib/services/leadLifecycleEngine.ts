@@ -1,4 +1,4 @@
-import { and, eq, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { db, type FeedbackDbTransaction } from '@/lib/db';
 import {
   callLogs,
@@ -27,6 +27,7 @@ import {
   scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
 } from '@/lib/lifecycle/leadLifecycleSchedule';
+import { sanitizeFeedbackFormPayload } from '@/lib/feedback/feedbackFormSchema';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
 import { getMaxFollowupNumber, MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 import type { LeadType } from '@/lib/lifecycle/leadLifecycleValidation';
@@ -386,15 +387,21 @@ export async function recordConnectedOutcome(params: {
       updated_at: now,
     });
 
+    const feedbackForm =
+      payload.feedback_form !== undefined ? sanitizeFeedbackFormPayload(payload.feedback_form) : null;
+    const isTestimonial =
+      payload.is_testimonial === true || feedbackForm?.testimonial_comfortable === 'Yes';
+
     const connectedPayload = {
       ...(row.followup.payload ?? {}),
       connected_choice: choice,
       review_screenshot_url: payload.review_screenshot_url ?? null,
       review_remark: payload.review_remark ?? null,
-      is_testimonial: payload.is_testimonial ?? false,
+      is_testimonial: isTestimonial,
       issue_description: payload.issue_description ?? null,
       interested_remark: payload.interested_remark ?? null,
       didnt_reviewed_remark: payload.didnt_reviewed_remark ?? null,
+      feedback_form: feedbackForm,
       escalated: choice === 'issue_with_product',
       issue_advanced_once: choice === 'issue_with_product' ? !hasIssueAdvancedOnce : null,
       objective: getCallObjective(row.lead.lead_type, row.followup.followup_number),
@@ -472,12 +479,12 @@ export async function recordConnectedOutcome(params: {
         current_followup_number: nextFollowupNumber,
         current_touch_status: 'connected',
         last_connected_choice: choice,
-        is_testimonial: payload.is_testimonial ? true : row.lead.is_testimonial,
+        is_testimonial: isTestimonial ? true : row.lead.is_testimonial,
         active_lifecycle_id: lifecycleIsCompleted ? null : row.lifecycle.id,
         updated_at: now,
       })
       .where(eq(leads.id, row.lead.id));
-    if (payload.is_testimonial) {
+    if (isTestimonial) {
       await tx
         .update(customers)
         .set({
@@ -523,10 +530,31 @@ export async function getActiveFollowupsForDt(dtId: string, date: Date = new Dat
       )
     );
 
+  const followupIds = rows.map((r) => r.followup.id);
+  const attemptRows =
+    followupIds.length > 0
+      ? await db
+          .select({
+            followupId: leadLifecycleFollowupAttempts.followup_id,
+            outcome: leadLifecycleFollowupAttempts.outcome,
+          })
+          .from(leadLifecycleFollowupAttempts)
+          .where(inArray(leadLifecycleFollowupAttempts.followup_id, followupIds))
+          .orderBy(desc(leadLifecycleFollowupAttempts.attempt_date))
+      : [];
+
+  const lastAttemptOutcomeByFollowup = new Map<string, string>();
+  for (const attempt of attemptRows) {
+    if (!lastAttemptOutcomeByFollowup.has(attempt.followupId)) {
+      lastAttemptOutcomeByFollowup.set(attempt.followupId, attempt.outcome);
+    }
+  }
+
   const enriched = rows.map((r) => ({
     ...r,
     objective: getCallObjective(r.lead.lead_type, r.followup.followup_number),
     available_connected_choices: getConnectedChoicesForStage(r.followup.followup_number, r.lead.lead_type),
+    last_attempt_outcome: lastAttemptOutcomeByFollowup.get(r.followup.id) ?? null,
   }));
 
   const visible = filterVisibleActiveFollowups(enriched, now, dayBounds);
