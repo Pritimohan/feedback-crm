@@ -38,7 +38,7 @@ export function StageTypeCard({
       </div>
       <div className="flex flex-wrap gap-2.5 text-[11px]">
         <span style={{ color: 'var(--text2)' }}>
-          Att: <strong style={{ color: 'var(--text)' }}>{att}</strong>
+          Unique Attempts: <strong style={{ color: 'var(--text)' }}>{att}</strong>
         </span>
         <span style={{ color: 'var(--text2)' }}>
           Conn: <strong style={{ color: 'var(--text)' }}>{conn}</strong> ({connPct}%)

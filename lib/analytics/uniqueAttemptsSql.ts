@@ -70,6 +70,8 @@ export interface DedupedAttemptsCteOptions {
   brand: string | null | undefined;
   /** When set, filters attempts_base to this followup stage. */
   followupNumber?: number;
+  /** Scope to the dialing agent (fa.dt_id). */
+  dtId?: string;
   partition: DedupePartition;
   /** When true, applies lead-pool scheduling rules (per-stage analytics). */
   withLeadPoolFilter?: boolean;
@@ -83,12 +85,13 @@ export interface DedupedAttemptsCteOptions {
  * Attempt rows include all leads/lifecycles (active or not); only brand and agent filters apply.
  */
 export function dedupedAttemptsCte(opts: DedupedAttemptsCteOptions): SQL {
-  const { startIso, endIso, brand, followupNumber, partition, withLeadPoolFilter } = opts;
+  const { startIso, endIso, brand, followupNumber, dtId, partition, withLeadPoolFilter } = opts;
   const brandCond = sqlBrandCond(brand);
   const followupFilter =
     followupNumber !== undefined
       ? sql`AND lf.followup_number = ${followupNumber}`
       : sql``;
+  const dtFilter = dtId ? sql`AND fa.dt_id = ${dtId}` : sql``;
 
   const leadPoolFilter = withLeadPoolFilter
     ? sql`
@@ -123,14 +126,14 @@ export function dedupedAttemptsCte(opts: DedupedAttemptsCteOptions): SQL {
       INNER JOIN lead_lifecycle_followups lf ON fa.followup_id = lf.id
       INNER JOIN lead_lifecycles ol ON lf.lifecycle_id = ol.id
       INNER JOIN leads l ON ol.lead_id = l.id
-      INNER JOIN users u ON l.assigned_dt_id = u.id
-      WHERE l.assigned_dt_id IS NOT NULL
-        AND u.role = 'dt'
+      INNER JOIN users u ON fa.dt_id = u.id
+      WHERE u.role = 'dt'
         AND u.active_status = true
         ${sqlBrandActiveProfileExists('u', brand)}
         ${brandCond}
         AND fa.attempt_date >= ${startIso}::timestamp
         AND fa.attempt_date <= ${endIso}::timestamp
+        ${dtFilter}
         ${followupFilter}
         ${leadPoolFilter}
     ),
@@ -186,6 +189,11 @@ function dayKey(customerId: string, attemptDay: string, dtId?: string): string {
 
 function leadDayKey(leadId: string, attemptDay: string): string {
   return `${leadId}|${attemptDay}`;
+}
+
+/** Raw dial count (no dedupe). */
+export function countTotalDialsFromRows(rows: AttemptRowForDedupe[]): number {
+  return rows.length;
 }
 
 /** Unique customer-days (or dt+customer-days when dtId set on rows). */

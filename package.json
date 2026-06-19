@@ -22,7 +22,8 @@
     "dry-run:nightly-redistribute-stage0": "tsx scripts/dry-run-nightly-redistribute-stage0.ts",
     "test:followup-priority": "tsx lib/dt/run-feedback-priority-tests.ts",
     "test:feedback-import": "tsx scripts/test-feedback-import.ts",
-    "test:feedback-form": "tsx scripts/test-feedback-form-schema.ts"
+    "test:feedback-form": "tsx scripts/test-feedback-form-schema.ts",
+    "export:issue-with-product": "tsx scripts/export-issue-with-product-clients.ts"
   },
   "dependencies": {
     "@ant-design/nextjs-registry": "^1.3.0",

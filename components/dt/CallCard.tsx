@@ -3,6 +3,7 @@
 import React from 'react';
 import { ClockCircleOutlined, PhoneOutlined } from '@ant-design/icons';
 import { CallLog, getCallStatusInfo, getCountryFlag, getTimeAgo } from '@/lib/utils/callHistoryHelpers';
+import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 
 interface CallCardProps {
   call: CallLog;
@@ -34,11 +35,9 @@ export default function CallCard({ call }: CallCardProps) {
             </div>
           </div>
 
-          {call.attemptCount > 0 && (
-            <div className="inline-block bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded mt-1">
-              {call.attemptCount} Attempt{call.attemptCount > 1 ? 's' : ''}
-            </div>
-          )}
+          <div className="inline-block bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded mt-1">
+            {followupUiLabel(call.followupStage)}
+          </div>
         </div>
 
         <div className="flex flex-col items-end gap-2 min-w-max">

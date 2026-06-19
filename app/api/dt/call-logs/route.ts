@@ -4,6 +4,7 @@ import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { callLogs, customers, leads } from '@/lib/db/schema';
+import { dedupeCallHistoryRows } from '@/lib/services/callLogService';
 
 function parseDateBoundary(dateString: string | null, endOfDay = false): Date | null {
   if (!dateString) return null;
@@ -33,12 +34,13 @@ export async function GET(request: NextRequest) {
       customerName: customers.name,
       customerPhone: callLogs.customer_number,
       outcome: callLogs.attempt_outcome,
-      attemptCount: callLogs.followup_number,
+      followupNumber: callLogs.followup_number,
       leadType: callLogs.lead_type,
       durationSec: callLogs.provider_duration_sec,
       updatedAt: callLogs.updated_at,
       createdAt: callLogs.created_at,
       providerStatusRaw: callLogs.provider_status_raw,
+      attemptId: callLogs.attempt_id,
     })
     .from(callLogs)
     .innerJoin(leads, eq(callLogs.lead_id, leads.id))
@@ -46,13 +48,20 @@ export async function GET(request: NextRequest) {
     .where(and(...filters))
     .orderBy(desc(callLogs.updated_at));
 
-  const callHistory = rows.map((row) => ({
+  const dedupedRows = dedupeCallHistoryRows(
+    rows.map((row) => ({
+      ...row,
+      updatedAt: row.updatedAt ?? row.createdAt,
+    }))
+  );
+
+  const callHistory = dedupedRows.map((row) => ({
     id: row.id,
     customerId: row.customerId,
     customerName: row.customerName ?? 'Unknown Customer',
     customerPhone: row.customerPhone ?? '',
     outcome: row.outcome || row.providerStatusRaw || 'no_answer',
-    attemptCount: row.attemptCount ?? 0,
+    followupStage: row.followupNumber ?? 0,
     leadType: row.leadType ?? '',
     durationSec: row.durationSec ?? 0,
     updatedAt: row.updatedAt?.toISOString() ?? row.createdAt.toISOString(),

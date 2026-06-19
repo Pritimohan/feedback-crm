@@ -1,7 +1,6 @@
 import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { db, type FeedbackDbTransaction } from '@/lib/db';
 import {
-  callLogs,
   customers,
   leadLifecycleFollowupAttempts,
   leadLifecycleFollowups,
@@ -28,6 +27,7 @@ import {
   scheduleNextFollowupFromConnected,
 } from '@/lib/lifecycle/leadLifecycleSchedule';
 import { sanitizeFeedbackFormPayload } from '@/lib/feedback/feedbackFormSchema';
+import { upsertCallLogForAttempt } from '@/lib/services/callLogService';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
 import { getMaxFollowupNumber, MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 import type { LeadType } from '@/lib/lifecycle/leadLifecycleValidation';
@@ -36,17 +36,11 @@ import {
   getTodayBoundsForFeedbackFollowups,
   splitFeedbackFollowupsByIstDay,
 } from '@/lib/dt/activeFollowupsCallPriority';
+import { getAnalyticsDayBoundsForInstant } from '@/lib/utils/analyticsDates';
 
-function startOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function endOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
+function isFollowupOverdue(scheduledDate: Date, now: Date = new Date()): boolean {
+  const { startDate: istDayStart } = getAnalyticsDayBoundsForInstant(now);
+  return scheduledDate < istDayStart;
 }
 
 export function shouldAdvanceIssueWithProduct(params: {
@@ -172,8 +166,6 @@ export async function recordFollowupAttemptOutcome(params: {
 }) {
   const { followupId, dtId, outcome, notes } = params;
   const now = new Date();
-  const dayStart = startOfDay(now);
-  const dayEnd = endOfDay(now);
 
   const [row] = await db
     .select({
@@ -192,7 +184,7 @@ export async function recordFollowupAttemptOutcome(params: {
   if (row.followup.status !== 'pending') throw new Error('Followup is not pending');
 
   return db.transaction(async (tx) => {
-    const isOverdue = row.followup.scheduled_date < dayStart;
+    const isOverdue = isFollowupOverdue(row.followup.scheduled_date, now);
 
     const [attempt] = await tx
       .insert(leadLifecycleFollowupAttempts)
@@ -206,7 +198,7 @@ export async function recordFollowupAttemptOutcome(params: {
       })
       .returning();
 
-    await tx.insert(callLogs).values({
+    await upsertCallLogForAttempt(tx, {
       customer_id: row.customer.id,
       lead_id: row.lead.id,
       lifecycle_id: row.lifecycle.id,
@@ -362,11 +354,11 @@ export async function recordConnectedOutcome(params: {
       attempt_date: now,
       outcome: 'connected',
       notes,
-      was_overdue: row.followup.scheduled_date < startOfDay(now),
+      was_overdue: isFollowupOverdue(row.followup.scheduled_date, now),
       })
       .returning();
 
-    await tx.insert(callLogs).values({
+    await upsertCallLogForAttempt(tx, {
       customer_id: row.customer.id,
       lead_id: row.lead.id,
       lifecycle_id: row.lifecycle.id,
@@ -378,7 +370,7 @@ export async function recordConnectedOutcome(params: {
       attempt_outcome: 'connected',
       attempt_notes: notes,
       scheduled_date_at_attempt: row.followup.scheduled_date,
-      was_overdue: row.followup.scheduled_date < startOfDay(now),
+      was_overdue: isFollowupOverdue(row.followup.scheduled_date, now),
       lead_type: row.lead.lead_type,
       followup_number: row.followup.followup_number,
       ingest_source: 'attempt_api',

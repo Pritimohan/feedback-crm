@@ -42,7 +42,7 @@ export function matchesActiveFollowupOutcomeFilter(
   row: ActiveFollowupOutcomeRow,
   filterValue: string | null
 ): boolean {
-  if (!filterValue) return true;
+  if (!filterValue || filterValue === 'all') return true;
   return resolveActiveFollowupOutcomeFilterKey(row) === filterValue.toLowerCase().trim();
 }
 

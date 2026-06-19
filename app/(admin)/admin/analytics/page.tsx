@@ -152,21 +152,17 @@ export default function AnalyticsPage() {
       );
       const dietitians = (dietitianJson as { dietitians: DietitianAnalyticsRow[] }).dietitians ?? [];
       const useSnapshotData = filterType === 'today' || filterType === 'yesterday';
-      const useSnapshotAttempts = filterType === 'yesterday';
       setDietitianData(
         dietitians.map((d) => {
           const w = workloadByDtId.get(d.dtId);
-          const attempted =
-            useSnapshotAttempts && w?.callsAttempted != null ? w.callsAttempted : d.attempted;
-          const connected =
-            useSnapshotAttempts && w?.callsConnected != null ? w.callsConnected : d.connected;
           const leads = d.leads ?? 0;
-          const attemptPct = leads > 0 ? Math.round((attempted / leads) * 100) : d.attemptPct;
-          const connPct = attempted > 0 ? Math.round((connected / attempted) * 100) : d.connPct;
+          const attemptPct = leads > 0 ? Math.round((d.attempted / leads) * 100) : d.attemptPct;
+          const connPct = d.attempted > 0 ? Math.round((d.connected / d.attempted) * 100) : d.connPct;
           const conversionPct =
-            connected > 0 ? Math.round((d.reviewed / connected) * 100) : d.conversionPct;
+            d.connected > 0 ? Math.round((d.reviewed / d.connected) * 100) : d.conversionPct;
           return {
             ...d,
+            totalDials: d.totalDials ?? 0,
             todayDue: w?.todayDue ?? 0,
             overdue: w?.overdue ?? 0,
             newDueToday: useSnapshotData ? (w?.newDueToday ?? 0) : (d.newLeads ?? 0),
@@ -177,9 +173,7 @@ export default function AnalyticsPage() {
               ? w?.rescheduledDueTodayByStage
               : undefined,
             overdueDueToday: useSnapshotData ? (w?.overdueDueToday ?? 0) : 0,
-            overdueAttempted: useSnapshotData ? (w?.overdueAttempted ?? 0) : 0,
-            attempted,
-            connected,
+            overdueAttempted: d.overdueAttempted ?? 0,
             attemptPct,
             connPct,
             conversionPct,
@@ -252,9 +246,9 @@ export default function AnalyticsPage() {
       dot: '#D5F369',
     },
     {
-      label: 'Attempted',
+      label: 'Unique Attempts',
       value: uniqueAttempted,
-      subtitle: `unique customers called (once per day) · ${pct(uniqueAttempted, totalLeads || 1)}% of leads`,
+      subtitle: `unique customer-days (IST, once per day) · ${pct(uniqueAttempted, totalLeads || 1)}% of leads`,
       dot: '#FCB92D',
     },
     {
@@ -270,9 +264,9 @@ export default function AnalyticsPage() {
       dot: '#134175',
     },
     {
-      label: 'Total Lead touched',
+      label: 'Total Attempts',
       value: totalAttempts,
-      subtitle: `total call attempts · ${
+      subtitle: `every attempt row logged · ${
         analyticsData?.dateRange
           ? `${analyticsData.dateRange.startDate} to ${analyticsData.dateRange.endDate}`
           : filterType === 'custom' && customDateRange

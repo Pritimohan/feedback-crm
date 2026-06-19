@@ -15,13 +15,13 @@ export function FeedbackCallFunnel({ summary }: FeedbackCallFunnelProps) {
 
   const steps = [
     { label: 'Leads assigned', value: totalLeads, color: '#1D4838' },
-    { label: 'Attempted', value: attempted, color: '#2d6050' },
+    { label: 'Unique Attempts', value: attempted, color: '#2d6050' },
     { label: 'Connected', value: connected, color: '#134175' },
     { label: 'Reviewed (converted)', value: converted, color: '#D5F369' },
   ];
 
   const dropLabels: (string | null)[] = [
-    totalLeads > 0 ? `${pct(attempted, totalLeads)}% attempted` : null,
+    totalLeads > 0 ? `${pct(attempted, totalLeads)}% unique customer-days` : null,
     attempted > 0 ? `${pct(connected, attempted)}% of attempted` : null,
     connected > 0 ? `${pct(converted, connected)}% of connected` : null,
     null,

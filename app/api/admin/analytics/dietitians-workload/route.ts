@@ -8,11 +8,13 @@ import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import { getBrandActiveDietitians } from '@/lib/services/dtBrandProfileService';
 import {
+  fetchAgentAttemptCountsByDt,
+  fetchOverdueAttemptCountsByDt,
+} from '@/lib/analytics/attemptCounts';
+import {
   leadLifecycleFollowups,
-  leadLifecycleFollowupAttempts,
   leadLifecycles,
   leads,
-  callLogs,
 } from '@/lib/db/schema';
 
 dayjs.extend(utc);
@@ -185,111 +187,13 @@ export async function GET(request: NextRequest) {
       bucket.byOverdueSets[stageKey(Number(row.fn ?? 0))].add(leadId);
     }
 
-    const attemptDayWhere = and(
-      leadMatchesCrmBrand(brand),
-      gte(leadLifecycleFollowupAttempts.attempt_date, dayStart),
-      lte(leadLifecycleFollowupAttempts.attempt_date, dayEnd)
-    );
+    const startIso = dayStart.toISOString();
+    const endIso = dayEnd.toISOString();
 
-    const attemptRows = await db
-      .select({
-        dtId: leadLifecycleFollowupAttempts.dt_id,
-        callsAttempted: sql<number>`cast(count(distinct ${leads.customer_id}) as int)`,
-        callsConnected: sql<number>`cast(count(distinct case when lower(trim(${leadLifecycleFollowupAttempts.outcome})) = 'connected' then ${leads.customer_id} end) as int)`,
-      })
-      .from(leadLifecycleFollowupAttempts)
-      .innerJoin(
-        leadLifecycleFollowups,
-        eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
-      )
-      .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
-      .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
-      .where(attemptDayWhere)
-      .groupBy(leadLifecycleFollowupAttempts.dt_id);
-
-    const attemptsByDt = new Map(
-      attemptRows.map((r) => [
-        String(r.dtId ?? ''),
-        {
-          callsAttempted: Number(r.callsAttempted ?? 0),
-          callsConnected: Number(r.callsConnected ?? 0),
-        },
-      ])
-    );
-
-    const callLogDayFilter = and(
-      gte(callLogs.created_at, dayStart),
-      lte(callLogs.created_at, dayEnd),
-      leadMatchesCrmBrand(brand)
-    );
-
-    const callLogAggRows = await db
-      .select({
-        dtId: callLogs.dt_id,
-        callsAttempted: sql<number>`cast(count(distinct coalesce(${callLogs.attempt_id}, ${callLogs.id})) as int)`,
-        callsConnected: sql<number>`cast(count(distinct case when lower(trim(${callLogs.attempt_outcome})) = 'connected' then coalesce(${callLogs.attempt_id}, ${callLogs.id}) end) as int)`,
-      })
-      .from(callLogs)
-      .innerJoin(leads, eq(callLogs.lead_id, leads.id))
-      .leftJoin(leadLifecycles, eq(callLogs.lifecycle_id, leadLifecycles.id))
-      .where(callLogDayFilter)
-      .groupBy(callLogs.dt_id);
-
-    const callsFromLogsByDt = new Map(
-      callLogAggRows.map((r) => [
-        String(r.dtId ?? ''),
-        {
-          callsAttempted: Number(r.callsAttempted ?? 0),
-          callsConnected: Number(r.callsConnected ?? 0),
-        },
-      ])
-    );
-
-    const overdueFromAttemptsRows = await db
-      .select({
-        dtId: leadLifecycleFollowupAttempts.dt_id,
-        n: sql<number>`cast(count(*) as int)`,
-      })
-      .from(leadLifecycleFollowupAttempts)
-      .innerJoin(
-        leadLifecycleFollowups,
-        eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
-      )
-      .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
-      .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
-      .where(
-        and(
-          eq(leadLifecycleFollowupAttempts.was_overdue, true),
-          gte(leadLifecycleFollowupAttempts.attempt_date, dayStart),
-          lte(leadLifecycleFollowupAttempts.attempt_date, dayEnd),
-          leadMatchesCrmBrand(brand)
-        )
-      )
-      .groupBy(leadLifecycleFollowupAttempts.dt_id);
-
-    const overdueFromAttemptsMap = new Map(
-      overdueFromAttemptsRows.map((r) => [String(r.dtId ?? ''), Number(r.n ?? 0)])
-    );
-
-    const overdueFromLogsRows = await db
-      .select({
-        dtId: callLogs.dt_id,
-        n: sql<number>`cast(count(distinct coalesce(${callLogs.attempt_id}, ${callLogs.id})) as int)`,
-      })
-      .from(callLogs)
-      .innerJoin(leads, eq(callLogs.lead_id, leads.id))
-      .leftJoin(leadLifecycles, eq(callLogs.lifecycle_id, leadLifecycles.id))
-      .where(
-        and(
-          callLogDayFilter,
-          eq(callLogs.was_overdue, true)
-        )
-      )
-      .groupBy(callLogs.dt_id);
-
-    const overdueFromLogsMap = new Map(
-      overdueFromLogsRows.map((r) => [String(r.dtId ?? ''), Number(r.n ?? 0)])
-    );
+    const [attemptCountsByDt, overdueByDt] = await Promise.all([
+      fetchAgentAttemptCountsByDt({ startIso, endIso, brand }),
+      fetchOverdueAttemptCountsByDt({ startIso, endIso, brand }),
+    ]);
 
     const todayDueRows = await db
       .select({
@@ -337,15 +241,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       dietitians: activeDTs.map((dt) => {
         const a = agg.get(dt.id)!;
-        const fromAttempts = attemptsByDt.get(dt.id) ?? { callsAttempted: 0, callsConnected: 0 };
-        const fromLogs = callsFromLogsByDt.get(dt.id) ?? { callsAttempted: 0, callsConnected: 0 };
-        const useLogs = fromLogs.callsAttempted > 0;
-        const callsAttempted = useLogs ? fromLogs.callsAttempted : fromAttempts.callsAttempted;
-        const callsConnected = useLogs ? fromLogs.callsConnected : fromAttempts.callsConnected;
-
-        const overdueLogN = overdueFromLogsMap.get(dt.id) ?? 0;
-        const overdueAttN = overdueFromAttemptsMap.get(dt.id) ?? 0;
-        const overdueAttempted = overdueLogN > 0 ? overdueLogN : overdueAttN;
+        const attemptCounts = attemptCountsByDt.get(dt.id) ?? {
+          totalDials: 0,
+          uniqueCustomerDays: 0,
+          uniqueCustomerDaysConnected: 0,
+        };
 
         return {
           dtId: dt.id,
@@ -358,9 +258,10 @@ export async function GET(request: NextRequest) {
           rescheduledDueTodayByStage: setsToCounts(a.byReschedSets),
           overdueDueToday: a.overdueLeadIds.size,
           overdueByStage: setsToCounts(a.byOverdueSets),
-          overdueAttempted,
-          callsAttempted,
-          callsConnected,
+          overdueAttempted: overdueByDt.get(dt.id) ?? 0,
+          callsAttempted: attemptCounts.uniqueCustomerDays,
+          callsConnected: attemptCounts.uniqueCustomerDaysConnected,
+          totalDials: attemptCounts.totalDials,
         };
       }),
     });

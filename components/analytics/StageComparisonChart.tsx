@@ -32,7 +32,7 @@ const SERIES_META: {
   fill: string;
   description?: string;
 }[] = [
-  { key: 'attempted', label: 'Attempted', fill: 'rgba(29,72,56,.18)' },
+  { key: 'attempted', label: 'Unique Attempts', fill: 'rgba(29,72,56,.18)' },
   {
     key: 'connected',
     label: 'Connected',

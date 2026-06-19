@@ -9,6 +9,7 @@ import {
   type AnalyticsFilterType,
 } from '@/lib/utils/analyticsDates';
 import type { DietitianAnalyticsRow } from '@/types/analytics';
+import { fetchOverdueAttemptCountsByDt } from '@/lib/analytics/attemptCounts';
 
 export interface DietitianAnalyticsResponse {
   dietitians: DietitianAnalyticsRow[];
@@ -60,7 +61,8 @@ export async function GET(request: NextRequest) {
     const startStr = startDate.toISOString();
     const endStr = endDate.toISOString();
 
-    const result = await db.execute(sql`
+    const [result, overdueByDt] = await Promise.all([
+      db.execute(sql`
       WITH lead_pool AS (
         SELECT lf.id AS followup_id, lf.followup_number, lf.scheduled_date,
                lf.first_attempt_date, lf.attempt_count, l.assigned_dt_id, l.id AS lead_id
@@ -153,6 +155,7 @@ export async function GET(request: NextRequest) {
               )
           ) AS rescheduled_leads,
           (SELECT COUNT(DISTINCT (a.customer_id, a.attempt_day_ist))::int FROM attempts_in_range a WHERE a.dt_id = u.id) AS attempted,
+          (SELECT COUNT(*)::int FROM attempts_in_range a WHERE a.dt_id = u.id) AS total_dials,
           (SELECT COUNT(*)::int FROM connected_dt_days c WHERE c.dt_id = u.id) AS connected,
           (SELECT COUNT(DISTINCT l.id)::int
            FROM lead_lifecycle_followups lf
@@ -212,13 +215,16 @@ export async function GET(request: NextRequest) {
       SELECT * FROM dt_stats
       WHERE leads > 0 OR attempted > 0
       ORDER BY attempted DESC
-    `);
+    `),
+      fetchOverdueAttemptCountsByDt({ startIso: startStr, endIso: endStr, brand }),
+    ]);
 
     const rows = Array.isArray(result) ? result : (result as { rows?: unknown[] })?.rows ?? [];
 
     const dietitians: DietitianAnalyticsRow[] = rows.map((r) => {
       const row = r as Record<string, unknown>;
       const attempted = Number(row.attempted ?? 0);
+      const totalDials = Number(row.total_dials ?? 0);
       const connected = Number(row.connected ?? 0);
       const reviewed = Number(row.reviewed ?? 0);
       const fu2Conn = Number(row.fu2_conn ?? 0);
@@ -234,6 +240,7 @@ export async function GET(request: NextRequest) {
         newLeads: Number(row.new_leads ?? 0),
         rescheduledLeads: Number(row.rescheduled_leads ?? 0),
         attempted,
+        totalDials,
         connected,
         reviewed,
         attemptPct:
@@ -252,6 +259,7 @@ export async function GET(request: NextRequest) {
         fu3Att,
         unreachablePct: attempted > 0 ? Math.round((unreachableCount / attempted) * 100) : 0,
         tToCallHours: parseFloat(Number(row.ttc_avg ?? 0).toFixed(1)),
+        overdueAttempted: overdueByDt.get(String(row.dt_id ?? '')) ?? 0,
       };
     });
 
@@ -278,6 +286,7 @@ export async function GET(request: NextRequest) {
           newLeads: 0,
           rescheduledLeads: 0,
           attempted: 0,
+          totalDials: 0,
           connected: 0,
           reviewed: 0,
           attemptPct: 0,
@@ -293,6 +302,7 @@ export async function GET(request: NextRequest) {
           fu3Att: 0,
           unreachablePct: 0,
           tToCallHours: 0,
+          overdueAttempted: overdueByDt.get(id) ?? 0,
         });
       }
     }

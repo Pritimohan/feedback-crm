@@ -15,6 +15,10 @@ import {
   formatActiveFollowupOutcomeLabel,
   matchesActiveFollowupOutcomeFilter,
 } from '@/lib/utils/activeFollowupOutcomeFilter';
+import {
+  MARKETPLACE_FILTER_OPTIONS,
+  matchesMarketplaceFilter,
+} from '@/lib/utils/marketplaceSources';
 
 dayjs.extend(relativeTime);
 
@@ -32,6 +36,7 @@ interface FollowupRow {
   lead: {
     id: string;
     activity_status: string;
+    source?: string | null;
     last_connected_choice?: string | null;
     current_touch_status?: string | null;
   };
@@ -59,24 +64,22 @@ interface ActiveResponse {
   dayBounds?: { dayStart: string; dayEnd: string };
 }
 
-type FollowupNumberFilterKey = 'all' | '0' | '1' | '2' | '3' | '4';
-type AttemptFilterKey = 'all' | '0' | '1' | '2' | '3plus';
-type OutcomeFilterKey = string | 'all';
+type FollowupNumberFilterKey = 0 | 1 | 2 | 3 | 4;
+type AttemptFilterKey = 0 | 1 | 2 | '3plus';
+type OutcomeFilterKey = string;
 
 const FOLLOWUP_FILTER_OPTIONS: { label: string; value: FollowupNumberFilterKey }[] = [
-  { label: 'All follow-ups', value: 'all' },
-  { label: 'First call (0)', value: '0' },
-  { label: 'Followup 1', value: '1' },
-  { label: 'Followup 2', value: '2' },
-  { label: 'Followup 3', value: '3' },
-  { label: 'Followup 4', value: '4' },
+  { label: 'First call (0)', value: 0 },
+  { label: 'Followup 1', value: 1 },
+  { label: 'Followup 2', value: 2 },
+  { label: 'Followup 3', value: 3 },
+  { label: 'Followup 4', value: 4 },
 ];
 
 const ATTEMPT_FILTER_OPTIONS: { label: string; value: AttemptFilterKey }[] = [
-  { label: 'All attempts', value: 'all' },
-  { label: '0 attempts', value: '0' },
-  { label: '1 attempt', value: '1' },
-  { label: '2 attempts', value: '2' },
+  { label: '0 attempts', value: 0 },
+  { label: '1 attempt', value: 1 },
+  { label: '2 attempts', value: 2 },
   { label: '3+ attempts', value: '3plus' },
 ];
 
@@ -89,9 +92,10 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
   const [calls, setCalls] = useState<FollowupRow[]>([]);
   const [dayBounds, setDayBounds] = useState<{ dayStart: Date; dayEnd: Date } | undefined>();
   const [loading, setLoading] = useState(true);
-  const [followupFilter, setFollowupFilter] = useState<FollowupNumberFilterKey>('all');
-  const [attemptFilter, setAttemptFilter] = useState<AttemptFilterKey>('all');
-  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilterKey>('all');
+  const [followupFilter, setFollowupFilter] = useState<FollowupNumberFilterKey | null>(null);
+  const [attemptFilter, setAttemptFilter] = useState<AttemptFilterKey | null>(null);
+  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilterKey | null>(null);
+  const [marketplaceFilter, setMarketplaceFilter] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -105,9 +109,10 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
         setLoading(true);
         const res = await fetch('/api/dt/followups/active');
         const json = (await res.json()) as ActiveResponse;
-        const raw = Array.isArray(json.calls)
-          ? json.calls
-          : [...(json.todayDue ?? []), ...(json.overdue ?? [])];
+        const raw =
+          Array.isArray(json.calls) && json.calls.length > 0
+            ? json.calls
+            : [...(json.todayDue ?? []), ...(json.overdue ?? [])];
         const bounds =
           json.dayBounds?.dayStart && json.dayBounds?.dayEnd
             ? {
@@ -130,35 +135,39 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
   }, [refreshTrigger]);
 
   const filterByFollowupNumber = (items: FollowupRow[]) => {
-    if (followupFilter === 'all') return items;
-    const n = Number.parseInt(followupFilter, 10);
-    return items.filter((item) => Number(item.followup.followup_number) === n);
+    if (followupFilter === null) return items;
+    return items.filter((item) => Number(item.followup.followup_number) === followupFilter);
   };
 
   const filterByAttemptCount = (items: FollowupRow[]) => {
-    if (attemptFilter === 'all') return items;
+    if (attemptFilter === null) return items;
     if (attemptFilter === '3plus') {
       return items.filter((item) => Number(item.followup.attempt_count) >= 3);
     }
-    const n = Number.parseInt(attemptFilter, 10);
-    return items.filter((item) => Number(item.followup.attempt_count) === n);
+    return items.filter((item) => Number(item.followup.attempt_count) === attemptFilter);
   };
 
   const filterByOutcome = (items: FollowupRow[]) => {
-    if (outcomeFilter === 'all') return items;
+    if (!outcomeFilter) return items;
     return items.filter((item) => matchesActiveFollowupOutcomeFilter(item, outcomeFilter));
+  };
+
+  const filterByMarketplace = (items: FollowupRow[]) => {
+    if (!marketplaceFilter) return items;
+    return items.filter((item) => matchesMarketplaceFilter(item.lead.source, marketplaceFilter));
   };
 
   const filteredSortedCalls = useMemo(() => {
     const visible = filterVisibleActiveFollowups(calls, currentTime, dayBounds);
     const byFollowup = filterByFollowupNumber(visible);
     const byAttempt = filterByAttemptCount(byFollowup);
-    const filtered = filterByOutcome(byAttempt);
+    const byOutcome = filterByOutcome(byAttempt);
+    const filtered = filterByMarketplace(byOutcome);
     return sortFeedbackActiveFollowupCalls(filtered, {
       now: currentTime,
       dayBounds,
     });
-  }, [calls, currentTime, followupFilter, attemptFilter, outcomeFilter, dayBounds]);
+  }, [calls, currentTime, followupFilter, attemptFilter, outcomeFilter, marketplaceFilter, dayBounds]);
 
   const getFollowupBadge = (followupNumber: number) => {
     if (followupNumber === 0) {
@@ -216,7 +225,11 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
     return <Card loading />;
   }
 
-  const filtersActive = followupFilter !== 'all' || attemptFilter !== 'all' || outcomeFilter !== 'all';
+  const filtersActive =
+    marketplaceFilter !== null ||
+    followupFilter !== null ||
+    attemptFilter !== null ||
+    outcomeFilter !== null;
 
   return (
     <Space orientation="vertical" size="large" style={{ width: '100%' }}>
@@ -224,44 +237,46 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
         style={{ width: '100%', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 12 }}
         align="center"
       >
-        <Space align="center" size={8}>
-          <Text type="secondary">Follow-ups</Text>
-          <Select
-            value={followupFilter}
-            onChange={(value) => setFollowupFilter(value as FollowupNumberFilterKey)}
-            style={{ width: 200 }}
-            options={FOLLOWUP_FILTER_OPTIONS}
-            className="crm-select"
-            popupClassName="crm-select-dropdown"
-          />
-        </Space>
-        <Space align="center" size={8}>
-          <Text type="secondary">Attempts</Text>
-          <Select
-            value={attemptFilter}
-            onChange={(value) => setAttemptFilter(value as AttemptFilterKey)}
-            style={{ width: 200 }}
-            options={ATTEMPT_FILTER_OPTIONS}
-            className="crm-select"
-            popupClassName="crm-select-dropdown"
-          />
-        </Space>
-        <Space align="center" size={8}>
-          <Text type="secondary">Call outcome</Text>
-          <Select
-            value={outcomeFilter}
-            onChange={(value) => setOutcomeFilter((value ?? 'all') as OutcomeFilterKey)}
-            style={{ width: 220 }}
-            options={[
-              { label: 'All outcomes', value: 'all' },
-              ...ACTIVE_FOLLOWUP_OUTCOME_FILTER_OPTIONS,
-            ]}
-            className="crm-select"
-            popupClassName="crm-select-dropdown"
-            allowClear
-            onClear={() => setOutcomeFilter('all')}
-          />
-        </Space>
+        <Select
+          placeholder="Filter by Marketplace"
+          allowClear
+          value={marketplaceFilter}
+          onChange={(value) => setMarketplaceFilter(value ?? null)}
+          style={{ width: 200 }}
+          options={[...MARKETPLACE_FILTER_OPTIONS]}
+          className="crm-select"
+          popupClassName="crm-select-dropdown"
+        />
+        <Select
+          placeholder="Filter by follow-up stage"
+          allowClear
+          value={followupFilter}
+          onChange={(value) => setFollowupFilter((value ?? null) as FollowupNumberFilterKey | null)}
+          style={{ width: 200 }}
+          options={FOLLOWUP_FILTER_OPTIONS}
+          className="crm-select"
+          popupClassName="crm-select-dropdown"
+        />
+        <Select
+          placeholder="Filter by attempts"
+          allowClear
+          value={attemptFilter}
+          onChange={(value) => setAttemptFilter((value ?? null) as AttemptFilterKey | null)}
+          style={{ width: 200 }}
+          options={ATTEMPT_FILTER_OPTIONS}
+          className="crm-select"
+          popupClassName="crm-select-dropdown"
+        />
+        <Select
+          placeholder="Filter by call outcome"
+          allowClear
+          value={outcomeFilter}
+          onChange={(value) => setOutcomeFilter(value ?? null)}
+          style={{ width: 220 }}
+          options={[...ACTIVE_FOLLOWUP_OUTCOME_FILTER_OPTIONS]}
+          className="crm-select"
+          popupClassName="crm-select-dropdown"
+        />
       </Space>
 
       {filteredSortedCalls.length === 0 ? (
