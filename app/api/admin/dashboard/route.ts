@@ -3,7 +3,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import { getCrmBrandFromCookie, leadMatchesCrmBrand } from '@/lib/crmBrand';
 import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { callLogs, customers, leadLifecycleFollowups, leadLifecycles, leads } from '@/lib/db/schema';
+import { customers, leadLifecycleFollowups, leadLifecycles, leads } from '@/lib/db/schema';
+import { countTotalDials } from '@/lib/analytics/attemptCounts';
+import { getAnalyticsDayBoundsForInstant } from '@/lib/utils/analyticsDates';
 
 export async function GET() {
   const session = await getSession();
@@ -11,21 +13,21 @@ export async function GET() {
   if (session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const brand = await getCrmBrandFromCookie();
+  const { startDate, endDate } = getAnalyticsDayBoundsForInstant();
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+  const attemptOpts = { startIso, endIso, brand };
 
-  const [customerCount, callsToday, completedToday] = await Promise.all([
+  const [customerCount, totalCalls, completedToday] = await Promise.all([
     db
       .select({ total: sql<number>`count(distinct ${customers.id})` })
       .from(customers)
       .innerJoin(leads, eq(leads.customer_id, customers.id))
       .where(leadMatchesCrmBrand(brand)),
-    db
-      .select({ total: sql<number>`count(*) filter (where ${callLogs.created_at} >= date_trunc('day', now()))` })
-      .from(callLogs)
-      .innerJoin(leads, eq(callLogs.lead_id, leads.id))
-      .where(leadMatchesCrmBrand(brand)),
+    countTotalDials(attemptOpts),
     db
       .select({
-        total: sql<number>`count(*) filter (where ${leadLifecycleFollowups.updated_at} >= date_trunc('day', now()) and ${leadLifecycleFollowups.status} = 'connected')`,
+        total: sql<number>`count(*) filter (where ${leadLifecycleFollowups.updated_at} >= ${startIso}::timestamp and ${leadLifecycleFollowups.updated_at} <= ${endIso}::timestamp and ${leadLifecycleFollowups.status} = 'connected')`,
       })
       .from(leadLifecycleFollowups)
       .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
@@ -33,7 +35,6 @@ export async function GET() {
       .where(and(eq(leadLifecycleFollowups.status, 'connected'), leadMatchesCrmBrand(brand))),
   ]);
 
-  const totalCalls = Number(callsToday[0]?.total ?? 0);
   const totalCompleted = Number(completedToday[0]?.total ?? 0);
   return NextResponse.json({
     totalCustomers: Number(customerCount[0]?.total ?? 0),

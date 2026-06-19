@@ -72,7 +72,7 @@ export default function AdminDashboardPage() {
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card>
-            <Statistic title="Calls Today" value={stats.callsToday} prefix={<PhoneOutlined />} valueStyle={{ color: '#1d4838' }} />
+            <Statistic title="Total Attempts Today" value={stats.callsToday} prefix={<PhoneOutlined />} valueStyle={{ color: '#1d4838' }} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>

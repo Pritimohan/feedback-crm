@@ -71,7 +71,7 @@ export function AttemptOutcomesChart({ data }: AttemptOutcomesChartProps) {
               fontSize: 12,
             }}
           />
-          <Bar dataKey="count" radius={[4, 4, 0, 0]} name="Attempts">
+          <Bar dataKey="count" radius={[4, 4, 0, 0]} name="Unique Attempts">
             {chartData.map((entry) => (
               <Cell
                 key={entry.key}

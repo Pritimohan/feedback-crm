@@ -1,10 +1,116 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull } from 'drizzle-orm';
 import { callLogs, customers, leads, type NewCallLog } from '@/lib/db/schema';
-import { db } from '@/lib/db';
+import { db, type FeedbackDbTransaction } from '@/lib/db';
+
+/** Max age of an adhoc call_log (no attempt_id) that can be linked when logging an outcome. */
+export const CALL_LOG_ATTEMPT_LINK_WINDOW_MS = 30 * 60 * 1000;
+
+/** Cluster window for deduping duplicate call history rows (adhoc + attempt_api). */
+export const CALL_HISTORY_DEDUPE_WINDOW_MS = 3 * 60 * 1000;
+
+export type AttemptCallLogInput = Omit<NewCallLog, 'id' | 'created_at'> & {
+  updated_at: Date;
+};
 
 export async function createCallLog(input: NewCallLog) {
   const [row] = await db.insert(callLogs).values(input).returning();
   return row;
+}
+
+/**
+ * Links an attempt outcome to the adhoc call_log created at dial time when possible,
+ * instead of inserting a second row for the same physical call.
+ */
+export async function upsertCallLogForAttempt(
+  tx: FeedbackDbTransaction,
+  input: AttemptCallLogInput
+) {
+  const linkWindowStart = new Date(input.updated_at.getTime() - CALL_LOG_ATTEMPT_LINK_WINDOW_MS);
+
+  const [orphan] = await tx
+    .select({ id: callLogs.id })
+    .from(callLogs)
+    .where(
+      and(
+        eq(callLogs.customer_id, input.customer_id),
+        eq(callLogs.lead_id, input.lead_id),
+        eq(callLogs.dt_id, input.dt_id),
+        isNull(callLogs.attempt_id),
+        gte(callLogs.created_at, linkWindowStart)
+      )
+    )
+    .orderBy(desc(callLogs.created_at))
+    .limit(1);
+
+  if (orphan) {
+    const [updated] = await tx
+      .update(callLogs)
+      .set({
+        lifecycle_id: input.lifecycle_id,
+        followup_id: input.followup_id,
+        attempt_id: input.attempt_id,
+        attempt_outcome: input.attempt_outcome,
+        attempt_notes: input.attempt_notes,
+        scheduled_date_at_attempt: input.scheduled_date_at_attempt,
+        was_overdue: input.was_overdue,
+        lead_type: input.lead_type,
+        followup_number: input.followup_number,
+        ingest_source: input.ingest_source,
+        ingest_status: input.ingest_status,
+        raw_payload: input.raw_payload,
+        updated_at: input.updated_at,
+      })
+      .where(eq(callLogs.id, orphan.id))
+      .returning();
+    return updated!;
+  }
+
+  const [created] = await tx.insert(callLogs).values(input).returning();
+  return created;
+}
+
+export type CallHistoryDedupeRow = {
+  id: string;
+  customerId: string;
+  outcome: string;
+  updatedAt: Date;
+  attemptId?: string | null;
+};
+
+function callHistoryRowScore(row: CallHistoryDedupeRow): number {
+  let score = 0;
+  if (row.attemptId) score += 20;
+  if (row.outcome !== 'initiated') score += 10;
+  return score;
+}
+
+/** Collapse adhoc + attempt_api duplicates for the same dial in call history UI. */
+export function dedupeCallHistoryRows<T extends CallHistoryDedupeRow>(rows: T[]): T[] {
+  const sorted = [...rows].sort(
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+  );
+  const used = new Set<string>();
+  const kept: T[] = [];
+
+  for (const row of sorted) {
+    if (used.has(row.id)) continue;
+
+    const cluster = sorted.filter(
+      (candidate) =>
+        !used.has(candidate.id) &&
+        candidate.customerId === row.customerId &&
+        Math.abs(candidate.updatedAt.getTime() - row.updatedAt.getTime()) <= CALL_HISTORY_DEDUPE_WINDOW_MS
+    );
+
+    const best = cluster.reduce((winner, candidate) =>
+      callHistoryRowScore(candidate) > callHistoryRowScore(winner) ? candidate : winner
+    );
+
+    kept.push(best);
+    cluster.forEach((candidate) => used.add(candidate.id));
+  }
+
+  return kept.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
 export async function enrichCallLogBySid(params: {

@@ -4,7 +4,6 @@ import { getSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import {
   leadLifecycleFollowups,
-  leadLifecycleFollowupAttempts,
   leadLifecycles,
   leads,
   users,
@@ -25,6 +24,7 @@ import {
   sqlBrandActiveProfileExists,
   sqlConnectedFollowupFilters,
 } from '@/lib/analytics/uniqueAttemptsSql';
+import { fetchActivityMetrics } from '@/lib/analytics/attemptCounts';
 import { userBrandProfiles } from '@/lib/db/schema';
 
 export async function GET(request: NextRequest) {
@@ -246,6 +246,7 @@ export async function GET(request: NextRequest) {
         WITH ${dedupedAttemptsCte(dedupeCteOpts)}
         SELECT
           (SELECT COUNT(*)::int FROM attempts_deduped) AS attempted,
+          (SELECT COUNT(*)::int FROM attempts_base) AS total_dials,
           (SELECT COUNT(*)::int FROM (
             SELECT lead_id, attempt_day_ist
             FROM attempts_base
@@ -257,7 +258,9 @@ export async function GET(request: NextRequest) {
       const stageMetricsRows = Array.isArray(stageAttemptMetrics)
         ? stageAttemptMetrics
         : (stageAttemptMetrics as { rows?: unknown[] })?.rows ?? [];
-      const stageMetrics = stageMetricsRows[0] as { attempted?: number; connected?: number } | undefined;
+      const stageMetrics = stageMetricsRows[0] as
+        | { attempted?: number; total_dials?: number; connected?: number }
+        | undefined;
 
       const attemptsResult = await db.execute(sql`
         WITH ${dedupedAttemptsCte(dedupeCteOpts)}
@@ -352,6 +355,7 @@ export async function GET(request: NextRequest) {
       }
 
       const attemptedCount = Number(stageMetrics?.attempted ?? 0);
+      const totalDialsCount = Number(stageMetrics?.total_dials ?? 0);
       const connectedCount = Number(stageMetrics?.connected ?? 0);
       let callLaterCount = 0;
       let cnrBusyFailedWrongNumberCount = 0;
@@ -383,6 +387,7 @@ export async function GET(request: NextRequest) {
         leads: leadsCount,
         leadBreakdown,
         attempted: attemptedCount,
+        totalDials: totalDialsCount,
         callAttemptBreakdown,
         connected: connectedCount,
         connectedBreakdown,
@@ -443,57 +448,16 @@ export async function GET(request: NextRequest) {
     const secondFollowup = mergeSection(secondFollowupBase, secondFollowupConv);
     const thirdFollowup = mergeSection(thirdFollowupBase, thirdFollowupConv);
 
-    const activityWhere = and(
-      isNotNull(leads.assigned_dt_id),
-      leadMatchesCrmBrand(brand),
-      eq(users.role, 'dt'),
-      eq(users.active_status, true),
-      gte(leadLifecycleFollowupAttempts.attempt_date, startDate),
-      lte(leadLifecycleFollowupAttempts.attempt_date, endDate)
-    );
-
-    const activityCteOpts = {
+    const activityMetrics = await fetchActivityMetrics({
       startIso,
       endIso,
       brand,
-      partition: 'customer' as const,
-      withLeadPoolFilter: false,
-    };
-
-    const [attemptsResult, activityDedupedResult] = await Promise.all([
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(leadLifecycleFollowupAttempts)
-        .innerJoin(
-          leadLifecycleFollowups,
-          eq(leadLifecycleFollowupAttempts.followup_id, leadLifecycleFollowups.id)
-        )
-        .innerJoin(leadLifecycles, eq(leadLifecycleFollowups.lifecycle_id, leadLifecycles.id))
-        .innerJoin(leads, eq(leadLifecycles.lead_id, leads.id))
-        .innerJoin(users, eq(leads.assigned_dt_id, users.id))
-        .innerJoin(userBrandProfiles, brandProfileJoin)
-        .where(activityWhere),
-      db.execute(sql`
-        WITH ${dedupedAttemptsCte(activityCteOpts)}
-        SELECT
-          (SELECT COUNT(*)::int FROM (
-            SELECT DISTINCT customer_id, attempt_day_ist FROM attempts_base
-          ) customer_days) AS unique_customers_called,
-          (SELECT COUNT(*)::int FROM connected_customer_days) AS unique_customers_connected
-      `),
-    ]);
-
-    const activityDedupedRows = Array.isArray(activityDedupedResult)
-      ? activityDedupedResult
-      : (activityDedupedResult as { rows?: unknown[] })?.rows ?? [];
-    const activityDeduped = activityDedupedRows[0] as
-      | { unique_customers_called?: number; unique_customers_connected?: number }
-      | undefined;
+    });
 
     const activity = {
-      attempts: attemptsResult[0]?.count ?? 0,
-      uniqueCustomersCalled: Number(activityDeduped?.unique_customers_called ?? 0),
-      uniqueCustomersConnected: Number(activityDeduped?.unique_customers_connected ?? 0),
+      attempts: activityMetrics.totalDials,
+      uniqueCustomersCalled: activityMetrics.uniqueCustomerDays,
+      uniqueCustomersConnected: activityMetrics.uniqueCustomerDaysConnected,
     };
 
     const [distinctLeadsResult, distinctReviewedResult] = await Promise.all([
@@ -552,6 +516,7 @@ export async function GET(request: NextRequest) {
       newLeads: counselling.leadBreakdown?.freshLead ?? 0,
       rescheduledLeads: counselling.leadBreakdown?.rescheduledLead ?? 0,
       attempted: activity.uniqueCustomersCalled,
+      totalDials: activity.attempts,
       connected: activity.uniqueCustomersConnected,
       converted: convertedDistinct,
     };

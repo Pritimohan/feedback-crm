@@ -94,7 +94,7 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
             </th>
             <th
               className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
-              title="Number of overdue leads this agent attempted to call on the selected date"
+              title="Overdue attempt rows logged by this agent in the selected date range (was_overdue at dial time)"
             >
               Overdue Attempted
             </th>
@@ -118,9 +118,15 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
             </th>
             <th
               className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
+              title="Every attempt row logged by this agent in the selected date range"
+            >
+              Total Attempts
+            </th>
+            <th
+              className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
               title="Unique customer-days (IST): one count per customer per calendar day in range"
             >
-              Attempts
+              Unique Attempts
             </th>
             <th
               className="px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-white/55"
@@ -202,6 +208,7 @@ export function DietitianTable({ dietitians }: { dietitians: DietitianAnalyticsR
                   byStage={d.rescheduledDueTodayByStage}
                 />
               </td>
+              <td className="px-3 py-2">{d.totalDials ?? 0}</td>
               <td className="px-3 py-2">{d.attempted}</td>
               <td className="px-3 py-2">{d.connected}</td>
               <td className="px-3 py-2">{d.reviewed}</td>

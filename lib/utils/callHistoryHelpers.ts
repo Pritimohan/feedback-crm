@@ -8,7 +8,8 @@ export interface CallLog {
   customerName: string;
   customerPhone: string;
   outcome: string;
-  attemptCount: number;
+  /** Follow-up stage number (0–3), not dial attempt count. */
+  followupStage: number;
   updatedAt: string;
   customerId: string;
   leadType?: string;

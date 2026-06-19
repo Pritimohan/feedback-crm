@@ -28,6 +28,8 @@ export interface AnalyticsSection {
   leadBreakdown?: LeadBreakdown;
   /** Unique lead-days (IST): one per lead per calendar day, last attempt wins for disposition splits. */
   attempted: number;
+  /** Raw attempt rows in range for this stage. */
+  totalDials: number;
   callAttemptBreakdown: CallAttemptBreakdown;
   /** CRM connected leads in range (sum of conversionBreakdown). */
   connected: number;
@@ -48,7 +50,10 @@ export interface FunnelSummary {
   totalLeads: number;
   newLeads: number;
   rescheduledLeads: number;
+  /** Unique customer-days (IST). */
   attempted: number;
+  /** Raw attempt rows in range. */
+  totalDials: number;
   connected: number;
   converted: number;
 }
@@ -113,7 +118,10 @@ export interface DietitianAnalyticsRow {
   leads: number;
   newLeads: number;
   rescheduledLeads: number;
+  /** Unique customer-days (IST): one per customer per calendar day. */
   attempted: number;
+  /** Raw attempt rows logged by this agent in range. */
+  totalDials: number;
   connected: number;
   /** Attempted customer-days as % of distinct leads in pool for the period. */
   attemptPct: number;

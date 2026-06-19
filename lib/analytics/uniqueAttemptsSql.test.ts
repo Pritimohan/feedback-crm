@@ -1,6 +1,7 @@
 import {
   countConnectedCustomerDays,
   countConnectedLeadDays,
+  countTotalDialsFromRows,
   countUniqueCustomerDays,
   countUniqueLeadDays,
   dedupeLastAttemptPerCustomerDay,
@@ -30,6 +31,31 @@ function assert(name: string, condition: boolean) {
 }
 
 console.log('uniqueAttemptsSql tests');
+
+// Same customer, 3 dials same day → 3 total, 1 unique
+{
+  const rows: AttemptRowForDedupe[] = [
+    row({ customerId: 'c1', attemptDay: '2026-05-29', outcome: 'busy', attemptAt: '2026-05-29T10:00:00Z' }),
+    row({ customerId: 'c1', attemptDay: '2026-05-29', outcome: 'no_answer', attemptAt: '2026-05-29T12:00:00Z' }),
+    row({ customerId: 'c1', attemptDay: '2026-05-29', outcome: 'connected', attemptAt: '2026-05-29T14:00:00Z' }),
+  ];
+  assert('triple dial same day → 3 total dials', countTotalDialsFromRows(rows) === 3);
+  assert('triple dial same day → 1 unique customer-day', countUniqueCustomerDays(rows) === 1);
+}
+
+// Per-agent credit: each agent gets their own customer-day partition
+{
+  const rows: AttemptRowForDedupe[] = [
+    row({ customerId: 'c1', attemptDay: '2026-05-29', outcome: 'busy', attemptAt: '2026-05-29T10:00:00Z', dtId: 'dt1' }),
+    row({ customerId: 'c1', attemptDay: '2026-05-29', outcome: 'busy', attemptAt: '2026-05-29T11:00:00Z', dtId: 'dt1' }),
+    row({ customerId: 'c1', attemptDay: '2026-05-29', outcome: 'busy', attemptAt: '2026-05-29T12:00:00Z', dtId: 'dt2' }),
+  ];
+  const dt1Rows = rows.filter((r) => r.dtId === 'dt1');
+  const dt2Rows = rows.filter((r) => r.dtId === 'dt2');
+  assert('dt1 gets 2 total dials', countTotalDialsFromRows(dt1Rows) === 2);
+  assert('dt1 gets 1 unique customer-day', countUniqueCustomerDays(dt1Rows) === 1);
+  assert('dt2 gets 1 total dial', countTotalDialsFromRows(dt2Rows) === 1);
+}
 
 // Same customer, 2 attempts same day → 1 unique customer-day
 {

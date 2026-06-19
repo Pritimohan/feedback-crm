@@ -46,7 +46,7 @@ export function FollowupStageCard({
       </div>
       <div className="bg-[var(--surface)] px-3.5 py-3">
         <div className="mb-1.5 flex justify-between text-[11px]">
-          <span style={{ color: 'var(--text2)' }}>Attempted</span>
+          <span style={{ color: 'var(--text2)' }}>Unique Attempts</span>
           <span className="font-medium" style={{ color: 'var(--text)' }}>
             {attempted}
           </span>
