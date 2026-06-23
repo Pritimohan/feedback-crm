@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { Typography, Card, Table, Tag, Spin, message, Button, Space, Modal, Form, Input, Select, Switch, Tabs, Drawer, Row, Col, Statistic, Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
-import { PlusOutlined, DeleteOutlined, UserAddOutlined, CrownOutlined, TeamOutlined, EyeOutlined, SettingOutlined, MoreOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, UserAddOutlined, CrownOutlined, TeamOutlined, EyeOutlined, SettingOutlined, MoreOutlined, EditOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useCrmBrand } from '@/components/providers/BrandProvider';
 import { DtBrandProfileModal } from '@/components/admin/DtBrandProfileModal';
+import { EditUserModal } from '@/components/admin/EditUserModal';
 import { LeadTypePills, brandDisplayName, type LeadTypeValue } from '@/components/admin/LeadTypePills';
 
 const { Title } = Typography;
@@ -35,6 +36,7 @@ export default function UsersPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [isConfigureOpen, setIsConfigureOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('all');
@@ -69,6 +71,17 @@ export default function UsersPage() {
   const handleConfigure = (user: User) => {
     setSelectedUser(user);
     setIsConfigureOpen(true);
+  };
+
+  const handleEdit = (user: User) => {
+    setSelectedUser(user);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditFromDrawer = () => {
+    if (!selectedUser) return;
+    setIsDetailDrawerOpen(false);
+    setIsEditModalOpen(true);
   };
 
   const handleAddUser = async (values: { name: string; email: string; password: string; role: 'admin' | 'dt'; active_status: boolean }) => {
@@ -123,6 +136,11 @@ export default function UsersPage() {
       });
     }
     items.push({
+      key: 'edit',
+      label: 'Edit User',
+      icon: <EditOutlined />,
+    });
+    items.push({
       key: 'view',
       label: 'View Details',
       icon: <EyeOutlined />,
@@ -139,6 +157,7 @@ export default function UsersPage() {
 
   const handleUserAction = (user: User, key: string) => {
     if (key === 'configure') handleConfigure(user);
+    else if (key === 'edit') handleEdit(user);
     else if (key === 'view') handleViewDetails(user);
     else if (key === 'remove') confirmRemoveUser(user);
   };
@@ -315,7 +334,29 @@ export default function UsersPage() {
         onSaved={() => { void fetchUsers(); setIsConfigureOpen(false); setSelectedUser(null); }}
       />
 
-      <Drawer title={selectedUser?.name} placement="right" width={720} onClose={() => { setIsDetailDrawerOpen(false); setSelectedUser(null); }} open={isDetailDrawerOpen}>
+      <EditUserModal
+        open={isEditModalOpen}
+        userId={selectedUser?.id ?? null}
+        userName={selectedUser?.name ?? ''}
+        initialValues={selectedUser ? { name: selectedUser.name, email: selectedUser.email } : undefined}
+        onClose={() => { setIsEditModalOpen(false); setSelectedUser(null); }}
+        onSaved={() => { void fetchUsers(); setIsEditModalOpen(false); setSelectedUser(null); }}
+      />
+
+      <Drawer
+        title={selectedUser?.name}
+        placement="right"
+        width={720}
+        onClose={() => { setIsDetailDrawerOpen(false); setSelectedUser(null); }}
+        open={isDetailDrawerOpen}
+        extra={
+          selectedUser ? (
+            <Button type="primary" icon={<EditOutlined />} onClick={handleEditFromDrawer}>
+              Edit
+            </Button>
+          ) : null
+        }
+      >
         {selectedUser && (
           <Card size="small">
             <Space direction="vertical" style={{ width: '100%' }}>
