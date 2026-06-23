@@ -52,6 +52,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (typeof body?.email === 'string') {
       const email = body.email.trim().toLowerCase();
       if (!email) return NextResponse.json({ error: 'Email cannot be empty' }, { status: 400 });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+      }
 
       const [existing] = await db
         .select({ id: users.id })
