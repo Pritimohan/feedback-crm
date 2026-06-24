@@ -35,9 +35,7 @@ export async function middleware(request: NextRequest) {
 
   if (
     userRole === 'admin' &&
-    (pathname === '/admin/dashboard' ||
-      pathname === '/admin/config' ||
-      pathname === '/admin/test-call')
+    (pathname === '/admin/dashboard' || pathname === '/admin/test-call')
   ) {
     return NextResponse.redirect(new URL('/admin/users', request.url));
   }

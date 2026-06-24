@@ -20,8 +20,12 @@ import {
 import type { CrmBrand } from '@/lib/crmBrand.shared';
 import { leadMatchesCrmBrand } from '@/lib/crmBrand';
 import {
-  computeRetrySchedule,
-  DEFAULT_LEAD_LIFECYCLE_TEMPLATE,
+  computeScheduledDateForAttempt,
+  getActiveLifecycleConfig,
+  getStageConfig,
+  resolveConfigForLeadLifecycle,
+} from '@/lib/services/lifecycleConfigService';
+import {
   scheduleInitialFollowup,
   scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
@@ -29,7 +33,7 @@ import {
 import { sanitizeFeedbackFormPayload } from '@/lib/feedback/feedbackFormSchema';
 import { upsertCallLogForAttempt } from '@/lib/services/callLogService';
 import { getCallObjective } from '@/lib/lifecycle/callObjectives';
-import { getMaxFollowupNumber, MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
+import { getMaxFollowupNumber } from '@/lib/lifecycle/followupStageBounds';
 import type { LeadType } from '@/lib/lifecycle/leadLifecycleValidation';
 import {
   filterVisibleActiveFollowups,
@@ -88,6 +92,11 @@ export async function createLifecycleForLead(params: {
       return leadRow.lead.active_lifecycle_id;
     }
 
+    const activeConfig = await getActiveLifecycleConfig();
+    const configVersionId = activeConfig.id === 'defaults' ? null : activeConfig.id;
+    const leadType = leadRow.lead.lead_type as LeadType;
+    const stage0 = getStageConfig(activeConfig.config, leadType, 0);
+
     const [lifecycle] = await d
       .insert(leadLifecycles)
       .values({
@@ -95,19 +104,20 @@ export async function createLifecycleForLead(params: {
         lifecycle_type: lifecycleType ?? 'feedback_default',
         status: 'active',
         started_at: now,
+        lifecycle_config_version_id: configVersionId,
         metadata: {
-          template_key: templateKey ?? DEFAULT_LEAD_LIFECYCLE_TEMPLATE.key,
-          template_version: templateVersion ?? DEFAULT_LEAD_LIFECYCLE_TEMPLATE.version,
+          template_key: templateKey ?? 'review_followup',
+          template_version: templateVersion ?? activeConfig.version,
           anchor_at: anchorDate.toISOString(),
-          anchor_reason: 'manual_start',
+          anchor_reason: scheduleFirstCallNextCalendarDay ? 'next_calendar_day' : 'manual_start',
+          schedule_first_call_next_calendar_day: scheduleFirstCallNextCalendarDay ?? false,
         },
       })
       .returning();
 
     const firstScheduledDate = scheduleFirstCallNextCalendarDay
-      ? scheduleInitialFollowupNextCalendarDay(anchorDate)
-      : scheduleInitialFollowup(anchorDate);
-    const maxAttempts = DEFAULT_LEAD_LIFECYCLE_TEMPLATE.maxAttemptsByLeadType[leadRow.lead.lead_type];
+      ? scheduleInitialFollowupNextCalendarDay(anchorDate, activeConfig.config)
+      : scheduleInitialFollowup(anchorDate, activeConfig.config);
 
     await d.insert(leadLifecycleFollowups).values({
       lifecycle_id: lifecycle.id,
@@ -116,9 +126,9 @@ export async function createLifecycleForLead(params: {
       scheduled_date: firstScheduledDate,
       status: 'pending',
       attempt_count: 0,
-      max_attempts: maxAttempts,
+      max_attempts: stage0.maxAttempts,
       payload: {
-        objective: getCallObjective(leadRow.lead.lead_type, 0),
+        objective: getCallObjective(leadRow.lead.lead_type, 0, activeConfig.config),
       },
     });
 
@@ -235,8 +245,18 @@ export async function recordFollowupAttemptOutcome(params: {
     };
 
     if (!transition.terminal && (outcome === 'busy' || outcome === 'no_answer')) {
-      const nextScheduled = computeRetrySchedule({
-        now,
+      const resolved = await resolveConfigForLeadLifecycle(row.lifecycle.id);
+      const stage = getStageConfig(
+        resolved.config.config,
+        resolved.leadType,
+        row.followup.followup_number
+      );
+      const nextScheduled = computeScheduledDateForAttempt({
+        stage,
+        global: resolved.config.config.global,
+        nextAttemptCount: attemptCountAfter + 1,
+        anchorDate: row.followup.scheduled_date,
+        lastAttemptDate: now,
       });
       followupUpdates.scheduled_date = nextScheduled;
       followupUpdates.status = 'pending';
@@ -308,7 +328,9 @@ export async function recordConnectedOutcome(params: {
   if (row.followup.status !== 'pending') throw new Error('Followup is not pending');
 
   const leadType = row.lead.lead_type;
-  const maxFollowupNumber = getMaxFollowupNumber(leadType);
+  const resolved = await resolveConfigForLeadLifecycle(row.lifecycle.id);
+  const configBundle = resolved.config.config;
+  const maxFollowupNumber = getMaxFollowupNumber(leadType, configBundle);
 
   const allowedChoices = getConnectedChoicesForStage(row.followup.followup_number, leadType);
   if (!allowedChoices.includes(choice)) {
@@ -396,7 +418,7 @@ export async function recordConnectedOutcome(params: {
       feedback_form: feedbackForm,
       escalated: choice === 'issue_with_product',
       issue_advanced_once: choice === 'issue_with_product' ? !hasIssueAdvancedOnce : null,
-      objective: getCallObjective(row.lead.lead_type, row.followup.followup_number),
+      objective: getCallObjective(row.lead.lead_type, row.followup.followup_number, configBundle),
     };
 
     await tx
@@ -429,6 +451,7 @@ export async function recordConnectedOutcome(params: {
     let nextFollowupId: string | null = null;
     if (transition.advanceStage && row.followup.followup_number < maxFollowupNumber) {
       const insertedFollowupNumber = row.followup.followup_number + 1;
+      const nextStage = getStageConfig(configBundle, leadType, insertedFollowupNumber);
       const [nextFollowup] = await tx
         .insert(leadLifecycleFollowups)
         .values({
@@ -439,18 +462,19 @@ export async function recordConnectedOutcome(params: {
             referenceDate: now,
             brand: row.lead.brand,
             currentFollowupNumber: row.followup.followup_number,
+            bundle: configBundle,
+            stageDaysAfterPriorConnection: nextStage.daysAfterPriorConnection,
           }),
           status: 'pending',
           attempt_count: 0,
-          max_attempts: row.followup.max_attempts,
+          max_attempts: nextStage.maxAttempts,
           payload: {
-            objective: getCallObjective(row.lead.lead_type, insertedFollowupNumber),
+            objective: getCallObjective(row.lead.lead_type, insertedFollowupNumber, configBundle),
           },
           updated_at: now,
         })
         .returning({ id: leadLifecycleFollowups.id });
       nextFollowupId = nextFollowup.id;
-
     }
 
     const lifecycleIsCompleted =
