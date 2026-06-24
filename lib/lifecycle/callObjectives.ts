@@ -1,6 +1,11 @@
 import type { LeadType } from './leadLifecycleValidation';
+import {
+  getDefaultLifecycleConfig,
+  getTypeConfigFromBundle,
+  type LifecycleConfigBundle,
+} from '@/lib/lifecycleDefaults';
 
-const OBJECTIVES: Record<LeadType, Record<number, string>> = {
+const FALLBACK_OBJECTIVES: Record<LeadType, Record<number, string>> = {
   review: {
     0: 'Collect first review feedback',
     1: 'Nudge review completion',
@@ -16,6 +21,14 @@ const OBJECTIVES: Record<LeadType, Record<number, string>> = {
   },
 };
 
-export function getCallObjective(leadType: LeadType, followupNumber: number): string {
-  return OBJECTIVES[leadType]?.[followupNumber] ?? 'General follow-up';
+export function getCallObjective(
+  leadType: LeadType,
+  followupNumber: number,
+  bundle?: LifecycleConfigBundle
+): string {
+  const config = bundle ?? getDefaultLifecycleConfig();
+  const typeConfig = getTypeConfigFromBundle(config, leadType);
+  const stage = typeConfig.stages.find((s) => s.followupNumber === followupNumber);
+  if (stage?.label) return stage.label;
+  return FALLBACK_OBJECTIVES[leadType]?.[followupNumber] ?? 'General follow-up';
 }

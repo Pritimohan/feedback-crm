@@ -11,6 +11,7 @@ import {
   CrownOutlined,
   PieChartOutlined,
   UploadOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { UserProfileDropdown } from '@/components/layout/UserProfileDropdown';
 import { BrandSwitcher } from '@/components/layout/BrandSwitcher';
@@ -71,8 +72,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       icon: <UploadOutlined />,
       label: 'Data Import',
     },
+    {
+      key: '/admin/config',
+      icon: <SettingOutlined />,
+      label: 'Config',
+    },
   ];
-  const selectedKey = pathname;
+  const selectedKey = pathname.startsWith('/admin/config') ? '/admin/config' : pathname;
 
   const handleMenuClick: MenuProps['onClick'] = (e) => {
     router.push(e.key);

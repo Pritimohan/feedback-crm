@@ -12,6 +12,8 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test:lifecycle": "tsx scripts/test-lead-lifecycle-rules.ts",
+    "test:lifecycle-config": "tsx lib/services/run-lifecycle-config-tests.ts",
+    "db:migrate-lifecycle-config": "tsx scripts/run-lifecycle-config-settings-migration.ts",
     "test:duplicate-lifecycle": "tsx scripts/test-duplicate-customer-lifecycle-flow.ts",
     "seed:test": "tsx scripts/seed-test-data.ts",
     "user:create": "tsx scripts/create-user.ts",
@@ -41,7 +43,8 @@
     "react-dom": "19.2.3",
     "react-icons": "^5.6.0",
     "recharts": "^2.12.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

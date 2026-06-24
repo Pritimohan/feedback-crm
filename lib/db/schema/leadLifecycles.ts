@@ -1,6 +1,7 @@
 import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { leads } from './leads';
+import { lifecycleConfigSettings } from './lifecycleConfigSettings';
 
 export const leadLifecycles = pgTable(
   'lead_lifecycles',
@@ -16,6 +17,9 @@ export const leadLifecycles = pgTable(
     inactive_after_at: timestamp('inactive_after_at'),
     remarks: text('remarks'),
     metadata: jsonb('metadata'),
+    lifecycle_config_version_id: uuid('lifecycle_config_version_id').references(
+      () => lifecycleConfigSettings.id
+    ),
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
   },
