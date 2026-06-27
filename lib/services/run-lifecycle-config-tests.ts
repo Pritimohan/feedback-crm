@@ -19,6 +19,10 @@ import {
   REVIEW_MAX_ATTEMPTS,
 } from '@/lib/utils/lifecycleConstants';
 import {
+  ensureBusinessDayScheduledDate,
+  isSundayInSchedulingTz,
+} from '@/lib/utils/schedulingDates';
+import {
   scheduleInitialFollowup,
   scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
@@ -124,6 +128,32 @@ const retryScheduled = computeScheduledDateForAttempt({
 });
 assertEq(getRetryGapDays(stage0, 2), RETRY_AFTER_DAYS, 'retry gap from stage');
 assert(retryScheduled.getHours() === 9, 'retry scheduled at 9am');
+
+console.log('\n-- Busy reschedule scheduling --');
+const preferredSlot = new Date(2026, 5, 15, 14, 0, 0, 0);
+const resolvedPreferred = ensureBusinessDayScheduledDate(preferredSlot);
+assertEq(resolvedPreferred.getDate(), 15, 'weekday preferred date unchanged');
+assertEq(resolvedPreferred.getHours(), 14, 'weekday preferred time preserved');
+
+const sundayIst = new Date('2026-06-28T08:30:00.000Z');
+assert(isSundayInSchedulingTz(sundayIst), 'Sunday detected in IST');
+const mondayFromSunday = ensureBusinessDayScheduledDate(sundayIst);
+assert(!isSundayInSchedulingTz(mondayFromSunday), 'ensureBusinessDay moves off Sunday');
+assert(
+  ensureBusinessDayScheduledDate(new Date('2026-06-29T08:30:00.000Z')).getTime() ===
+    new Date('2026-06-29T08:30:00.000Z').getTime(),
+  'Monday unchanged'
+);
+
+const autoRetryBusy = computeScheduledDateForAttempt({
+  stage: stage0,
+  global: defaults.global,
+  nextAttemptCount: 2,
+  anchorDate: now,
+  lastAttemptDate: now,
+});
+assertEq(autoRetryBusy.getHours(), 9, 'busy cancel path uses retry schedule at 9am');
+assert(getRetryGapDays(stage0, 2) === RETRY_AFTER_DAYS, 'busy cancel uses configured retry gap');
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

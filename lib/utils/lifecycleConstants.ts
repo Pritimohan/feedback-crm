@@ -4,3 +4,13 @@ export const REVIEW_MAX_ATTEMPTS = 4;
 export const RETRY_AFTER_DAYS = 3;
 export const NEXT_DAY_RETRY_HOUR = 9;
 export const INITIAL_FOLLOWUP_CUTOFF_HOUR = 19;
+
+/** Time slots for busy reschedule (hour values for start of slot). */
+export const BUSY_RESCHEDULE_SLOTS = [
+  { label: '10-11 AM', hour: 10, minute: 0 },
+  { label: '11-12 PM', hour: 11, minute: 0 },
+  { label: '2-3 PM', hour: 14, minute: 0 },
+  { label: '3-4 PM', hour: 15, minute: 0 },
+  { label: '4-5 PM', hour: 16, minute: 0 },
+  { label: '5-6 PM', hour: 17, minute: 0 },
+] as const;

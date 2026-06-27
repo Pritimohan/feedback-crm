@@ -40,6 +40,7 @@ import {
   getTodayBoundsForFeedbackFollowups,
   splitFeedbackFollowupsByIstDay,
 } from '@/lib/dt/activeFollowupsCallPriority';
+import { ensureBusinessDayScheduledDate } from '@/lib/utils/schedulingDates';
 import { getAnalyticsDayBoundsForInstant } from '@/lib/utils/analyticsDates';
 
 function isFollowupOverdue(scheduledDate: Date, now: Date = new Date()): boolean {
@@ -173,8 +174,9 @@ export async function recordFollowupAttemptOutcome(params: {
   dtId: string;
   outcome: NonConnectedOutcome;
   notes?: string;
+  preferredScheduledDate?: Date;
 }) {
-  const { followupId, dtId, outcome, notes } = params;
+  const { followupId, dtId, outcome, notes, preferredScheduledDate } = params;
   const now = new Date();
 
   const [row] = await db
@@ -245,20 +247,24 @@ export async function recordFollowupAttemptOutcome(params: {
     };
 
     if (!transition.terminal && (outcome === 'busy' || outcome === 'no_answer')) {
-      const resolved = await resolveConfigForLeadLifecycle(row.lifecycle.id);
-      const stage = getStageConfig(
-        resolved.config.config,
-        resolved.leadType,
-        row.followup.followup_number
-      );
-      const nextScheduled = computeScheduledDateForAttempt({
-        stage,
-        global: resolved.config.config.global,
-        nextAttemptCount: attemptCountAfter + 1,
-        anchorDate: row.followup.scheduled_date,
-        lastAttemptDate: now,
-      });
-      followupUpdates.scheduled_date = nextScheduled;
+      if (outcome === 'busy' && preferredScheduledDate) {
+        followupUpdates.scheduled_date = ensureBusinessDayScheduledDate(preferredScheduledDate);
+      } else {
+        const resolved = await resolveConfigForLeadLifecycle(row.lifecycle.id);
+        const stage = getStageConfig(
+          resolved.config.config,
+          resolved.leadType,
+          row.followup.followup_number
+        );
+        const nextScheduled = computeScheduledDateForAttempt({
+          stage,
+          global: resolved.config.config.global,
+          nextAttemptCount: attemptCountAfter + 1,
+          anchorDate: row.followup.scheduled_date,
+          lastAttemptDate: now,
+        });
+        followupUpdates.scheduled_date = nextScheduled;
+      }
       followupUpdates.status = 'pending';
     }
 
