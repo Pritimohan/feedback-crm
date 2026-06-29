@@ -6,6 +6,8 @@ import {
   Button,
   Card,
   Col,
+  DatePicker,
+  Form,
   Image,
   Modal,
   Row,
@@ -31,9 +33,16 @@ import {
 import { getConnectedChoicesForStage } from '@/lib/lifecycle/leadLifecycleValidation';
 import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
+import { BUSY_RESCHEDULE_SLOTS } from '@/lib/utils/lifecycleConstants';
+import { isDtSchedulingPickerDateDisabled } from '@/lib/utils/schedulingDates';
 
 const { Text } = Typography;
 const MAX_REVIEW_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+
+const TIME_SLOT_OPTIONS = BUSY_RESCHEDULE_SLOTS.map((s, i) => ({
+  label: s.label,
+  value: i,
+}));
 
 function renderPreviousInteractionContent(remarks: string | null, payload: unknown): ReactNode {
   const rows: ReactNode[] = [];
@@ -199,6 +208,10 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   const [dontReviewedRemark, setDontReviewedRemark] = useState('');
   const [interestedRemark, setInterestedRemark] = useState('');
   const [feedbackForm, setFeedbackForm] = useState<FeedbackFormData>({});
+  const [showBusyRescheduleModal, setShowBusyRescheduleModal] = useState(false);
+  const [busyRescheduleDate, setBusyRescheduleDate] = useState<dayjs.Dayjs | null>(null);
+  const [busyRescheduleSlot, setBusyRescheduleSlot] = useState<number | null>(null);
+  const [busySubmitting, setBusySubmitting] = useState(false);
   const { message } = App.useApp();
 
   useEffect(() => {
@@ -221,6 +234,9 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         setDontReviewedRemark('');
         setInterestedRemark('');
         setFeedbackForm({});
+        setShowBusyRescheduleModal(false);
+        setBusyRescheduleDate(null);
+        setBusyRescheduleSlot(null);
       } catch (error: unknown) {
         message.error(error instanceof Error ? error.message : 'Failed to load followup details');
       } finally {
@@ -234,6 +250,10 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     if (!visible) {
       setDetails(null);
       setShowConnectedForm(false);
+      setShowBusyRescheduleModal(false);
+      setBusyRescheduleDate(null);
+      setBusyRescheduleSlot(null);
+      setBusySubmitting(false);
     }
   }, [visible]);
 
@@ -266,7 +286,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     }
   };
 
-  const handleShortcutOutcome = async (outcome: 'busy' | 'wrong_number' | 'not_interested' | 'no_answer') => {
+  const handleShortcutOutcome = async (outcome: 'wrong_number' | 'not_interested' | 'no_answer') => {
     if (!followupId) return;
     try {
       setSubmitting(true);
@@ -284,6 +304,91 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       message.error(error instanceof Error ? error.message : 'Failed to save outcome');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const completeAfterBusyAction = () => {
+    onSuccess();
+    onClose();
+  };
+
+  const handleBusyClick = () => {
+    setShowBusyRescheduleModal(true);
+    setBusyRescheduleDate(null);
+    setBusyRescheduleSlot(null);
+  };
+
+  const handleBusyCancel = async () => {
+    if (!followupId || busySubmitting) return;
+
+    try {
+      setBusySubmitting(true);
+      const res = await fetch(`/api/dt/followups/${followupId}/outcome`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome: 'busy' }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setShowBusyRescheduleModal(false);
+        setBusyRescheduleDate(null);
+        setBusyRescheduleSlot(null);
+        completeAfterBusyAction();
+        message.success('Attempt recorded. Rescheduled per retry schedule.');
+      } else {
+        message.error(json.error || 'Failed to record attempt');
+      }
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : 'Failed to record attempt');
+    } finally {
+      setBusySubmitting(false);
+    }
+  };
+
+  const handleBusyReschedule = async () => {
+    if (!followupId || busySubmitting) return;
+    if (busyRescheduleDate === null || busyRescheduleSlot === null) {
+      message.warning('Please select both date and time slot.');
+      return;
+    }
+
+    const slot = BUSY_RESCHEDULE_SLOTS[busyRescheduleSlot];
+    const scheduledDateTime = busyRescheduleDate
+      .hour(slot.hour)
+      .minute(slot.minute)
+      .second(0)
+      .millisecond(0)
+      .toISOString();
+
+    try {
+      setBusySubmitting(true);
+      const res = await fetch(`/api/dt/followups/${followupId}/outcome`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          outcome: 'busy',
+          preferred_scheduled_date: scheduledDateTime,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setShowBusyRescheduleModal(false);
+        setBusyRescheduleDate(null);
+        setBusyRescheduleSlot(null);
+        completeAfterBusyAction();
+        const nextDate = json.nextScheduledDate ? dayjs(json.nextScheduledDate) : null;
+        if (nextDate?.isValid()) {
+          message.success(`Attempt recorded. Rescheduled for ${nextDate.format('MMM D, YYYY h:mm A')}.`);
+        } else {
+          message.success('Attempt recorded. Rescheduled for preferred time slot.');
+        }
+      } else {
+        message.error(json.error || 'Failed to record attempt');
+      }
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : 'Failed to record attempt');
+    } finally {
+      setBusySubmitting(false);
     }
   };
 
@@ -515,7 +620,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <Card title="Other Options">
             <Space wrap>
-              <Button size="large" onClick={() => handleShortcutOutcome('busy')} loading={submitting}>
+              <Button size="large" onClick={handleBusyClick} loading={submitting}>
                 Busy
               </Button>
               <Button size="large" onClick={() => handleShortcutOutcome('wrong_number')} loading={submitting}>
@@ -705,6 +810,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   ];
 
   return (
+    <>
     <Modal
       title={
         <Text strong style={{ fontSize: 16, color: 'var(--crm-text, #1a1a1a)' }}>
@@ -719,5 +825,58 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     >
       <Tabs defaultActiveKey="call" items={tabItems} />
     </Modal>
+
+    <Modal
+      title="Customer is Busy - Schedule Preferred Time Slot"
+      open={showBusyRescheduleModal}
+      closable={false}
+      maskClosable={false}
+      footer={[
+        <Button key="cancel" onClick={handleBusyCancel} loading={busySubmitting} disabled={busySubmitting}>
+          Cancel
+        </Button>,
+        <Button
+          key="reschedule"
+          type="primary"
+          onClick={handleBusyReschedule}
+          loading={busySubmitting}
+          disabled={busySubmitting || busyRescheduleDate === null || busyRescheduleSlot === null}
+        >
+          Reschedule
+        </Button>,
+      ]}
+      destroyOnHidden
+    >
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Text type="secondary">
+          If the customer provided a preferred date and time slot, select below. They will appear in Today&apos;s Due on that day.
+        </Text>
+        <Form layout="vertical">
+          <Form.Item label="Date" required>
+            <DatePicker
+              value={busyRescheduleDate}
+              onChange={(date) => setBusyRescheduleDate(date)}
+              disabledDate={(current) =>
+                isDtSchedulingPickerDateDisabled(current, dayjs().startOf('day'))
+              }
+              disabled={busySubmitting}
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+          <Form.Item label="Time Slot" required>
+            <Select
+              placeholder="Select preferred time slot"
+              value={busyRescheduleSlot}
+              onChange={setBusyRescheduleSlot}
+              options={TIME_SLOT_OPTIONS}
+              disabled={busySubmitting}
+              style={{ width: '100%' }}
+              allowClear
+            />
+          </Form.Item>
+        </Form>
+      </Space>
+    </Modal>
+    </>
   );
 }
