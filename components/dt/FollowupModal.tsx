@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   App,
   Button,
@@ -38,6 +38,44 @@ import { isDtSchedulingPickerDateDisabled } from '@/lib/utils/schedulingDates';
 
 const { Text } = Typography;
 const MAX_REVIEW_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const SCREENSHOT_UPLOAD_RETRY_DELAY_MS = 500;
+
+async function uploadReviewScreenshotWithRetry(
+  file: File,
+  followupId: string,
+  retries = 1
+): Promise<{ path: string; signedUrl: string }> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('followupId', followupId);
+
+      const uploadRes = await fetch('/api/dt/uploads/review-screenshot', {
+        method: 'POST',
+        body: formData,
+      });
+      const uploadJson = await uploadRes.json();
+      if (!uploadRes.ok || !uploadJson?.success) {
+        throw new Error(uploadJson?.error || 'Failed to upload screenshot');
+      }
+
+      return {
+        path: String(uploadJson.data.path ?? ''),
+        signedUrl: String(uploadJson.data.signedUrl ?? ''),
+      };
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error('Failed to upload screenshot');
+      if (attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, SCREENSHOT_UPLOAD_RETRY_DELAY_MS));
+      }
+    }
+  }
+
+  throw lastError ?? new Error('Failed to upload screenshot');
+}
 
 const TIME_SLOT_OPTIONS = BUSY_RESCHEDULE_SLOTS.map((s, i) => ({
   label: s.label,
@@ -212,7 +250,20 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   const [busyRescheduleDate, setBusyRescheduleDate] = useState<dayjs.Dayjs | null>(null);
   const [busyRescheduleSlot, setBusyRescheduleSlot] = useState<number | null>(null);
   const [busySubmitting, setBusySubmitting] = useState(false);
+  const submitInFlightRef = useRef(false);
   const { message } = App.useApp();
+
+  const beginSubmit = (): boolean => {
+    if (submitInFlightRef.current) return false;
+    submitInFlightRef.current = true;
+    setSubmitting(true);
+    return true;
+  };
+
+  const endSubmit = () => {
+    submitInFlightRef.current = false;
+    setSubmitting(false);
+  };
 
   useEffect(() => {
     if (!followupId || !visible) return;
@@ -244,7 +295,9 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       }
     };
     void load();
-  }, [followupId, visible, message]);
+    // message is intentionally omitted — re-running on message identity would wipe in-progress form state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followupId, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -254,6 +307,8 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       setBusyRescheduleDate(null);
       setBusyRescheduleSlot(null);
       setBusySubmitting(false);
+      submitInFlightRef.current = false;
+      setSubmitting(false);
     }
   }, [visible]);
 
@@ -266,9 +321,8 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   }, [reviewScreenshotPreviewUrl]);
 
   const handleNoAnswer = async () => {
-    if (!followupId) return;
+    if (!followupId || !beginSubmit()) return;
     try {
-      setSubmitting(true);
       const res = await fetch(`/api/dt/followups/${followupId}/outcome`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -282,14 +336,13 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     } catch (error: unknown) {
       message.error(error instanceof Error ? error.message : 'Failed to save no answer');
     } finally {
-      setSubmitting(false);
+      endSubmit();
     }
   };
 
   const handleShortcutOutcome = async (outcome: 'wrong_number' | 'not_interested' | 'no_answer') => {
-    if (!followupId) return;
+    if (!followupId || !beginSubmit()) return;
     try {
-      setSubmitting(true);
       const res = await fetch(`/api/dt/followups/${followupId}/outcome`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -303,7 +356,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
     } catch (error: unknown) {
       message.error(error instanceof Error ? error.message : 'Failed to save outcome');
     } finally {
-      setSubmitting(false);
+      endSubmit();
     }
   };
 
@@ -393,9 +446,13 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
   };
 
   const submitConnected = async () => {
-    if (!followupId || !connectedChoice) return;
+    if (!followupId) return;
+    if (!connectedChoice) {
+      message.error('Please select a connected outcome before submitting.');
+      return;
+    }
+    if (!beginSubmit()) return;
     try {
-      setSubmitting(true);
       let uploadedReviewScreenshotPath = reviewScreenshotUrl || '';
 
       const isFeedbackLead = details?.lead.lead_type === 'feedback';
@@ -407,23 +464,19 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         reviewScreenshotFile
       ) {
         setUploadingReviewScreenshot(true);
-        const formData = new FormData();
-        formData.append('file', reviewScreenshotFile);
-        formData.append('followupId', followupId);
-
-        const uploadRes = await fetch('/api/dt/uploads/review-screenshot', {
-          method: 'POST',
-          body: formData,
-        });
-        const uploadJson = await uploadRes.json();
-        if (!uploadRes.ok || !uploadJson?.success) {
-          throw new Error(uploadJson?.error || 'Failed to upload screenshot');
+        try {
+          const uploaded = await uploadReviewScreenshotWithRetry(reviewScreenshotFile, followupId);
+          uploadedReviewScreenshotPath = uploaded.path;
+          setReviewScreenshotUrl(uploaded.path);
+          setReviewScreenshotPreviewUrl(uploaded.signedUrl);
+          setReviewScreenshotFile(null);
+        } catch (error: unknown) {
+          const uploadMessage =
+            error instanceof Error ? error.message : 'Failed to upload screenshot';
+          throw new Error(`Screenshot upload failed — please try again. (${uploadMessage})`);
+        } finally {
+          setUploadingReviewScreenshot(false);
         }
-
-        uploadedReviewScreenshotPath = String(uploadJson.data.path ?? '');
-        setReviewScreenshotUrl(uploadedReviewScreenshotPath);
-        setReviewScreenshotPreviewUrl(String(uploadJson.data.signedUrl ?? ''));
-        setReviewScreenshotFile(null);
       }
 
       const payload: Record<string, unknown> = isFeedbackLead
@@ -457,7 +510,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       message.error(error instanceof Error ? error.message : 'Failed to save connected outcome');
     } finally {
       setUploadingReviewScreenshot(false);
-      setSubmitting(false);
+      endSubmit();
     }
   };
 

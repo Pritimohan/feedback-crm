@@ -6,6 +6,7 @@ import { isNonConnectedOutcome } from '@/lib/lifecycle/leadLifecycleValidation';
 import { recordFollowupAttemptOutcome } from '@/lib/services/leadLifecycleEngine';
 import { getLeadFollowupDetails } from '@/lib/services/leadFollowupQueryService';
 import { isSundayInSchedulingTz } from '@/lib/utils/schedulingDates';
+import { logOutcomeSaveEvent } from '@/lib/utils/outcomeSaveLog';
 
 interface OutcomeBody {
   outcome: string;
@@ -20,6 +21,11 @@ function parsePreferredScheduledDate(raw: string): Date | null {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ followupId: string }> }) {
+  const startedAt = Date.now();
+  let followupId: string | undefined;
+  let outcome: string | undefined;
+  let dtId: string | undefined;
+
   try {
     const session = await getSession();
     if (!session) {
@@ -30,7 +36,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ fo
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { followupId } = await context.params;
+    const { followupId: resolvedFollowupId } = await context.params;
+    followupId = resolvedFollowupId;
+    dtId = session.id;
     const brand = await getCrmBrandFromCookie();
     const existing = await getLeadFollowupDetails(followupId);
     if (!existing || !leadDbBrandMatchesCrmFilter(existing.lead.brand, brand)) {
@@ -38,6 +46,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ fo
     }
 
     const body = (await request.json()) as OutcomeBody;
+    outcome = body.outcome;
 
     if (!isNonConnectedOutcome(body.outcome)) {
       return NextResponse.json({ error: 'Invalid outcome' }, { status: 400 });
@@ -77,12 +86,35 @@ export async function POST(request: NextRequest, context: { params: Promise<{ fo
       preferredScheduledDate,
     });
 
+    logOutcomeSaveEvent({
+      action: 'followup_outcome',
+      followupId,
+      dtId,
+      outcome: body.outcome,
+      status: 'success',
+      durationMs: Date.now() - startedAt,
+    });
+
     return NextResponse.json(result);
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    const isConflict = errorMessage === 'Followup is not pending';
+
+    logOutcomeSaveEvent({
+      action: 'followup_outcome',
+      followupId: followupId ?? 'unknown',
+      dtId,
+      outcome,
+      status: isConflict ? 'conflict' : 'error',
+      reason: isConflict ? 'duplicate_or_race' : undefined,
+      durationMs: Date.now() - startedAt,
+      error: errorMessage,
+    });
+
     console.error('Record followup outcome error:', error);
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: errorMessage,
       },
       { status: 400 }
     );

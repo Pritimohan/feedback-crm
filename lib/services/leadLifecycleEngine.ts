@@ -42,6 +42,8 @@ import {
 } from '@/lib/dt/activeFollowupsCallPriority';
 import { ensureBusinessDayScheduledDate } from '@/lib/utils/schedulingDates';
 import { getAnalyticsDayBoundsForInstant } from '@/lib/utils/analyticsDates';
+import { logOutcomeSaveEvent, type OutcomeSaveEvent } from '@/lib/utils/outcomeSaveLog';
+import type { LeadLifecycleFollowup } from '@/lib/db/schema/leadLifecycleFollowups';
 
 function isFollowupOverdue(scheduledDate: Date, now: Date = new Date()): boolean {
   const { startDate: istDayStart } = getAnalyticsDayBoundsForInstant(now);
@@ -55,6 +57,60 @@ export function shouldAdvanceIssueWithProduct(params: {
 }): boolean {
   const { hasIssueAdvancedOnce, followupNumber, leadType = 'review' } = params;
   return !hasIssueAdvancedOnce && followupNumber < getMaxFollowupNumber(leadType);
+}
+
+async function lockPendingFollowup(
+  tx: FeedbackDbTransaction,
+  followupId: string,
+  logAction: OutcomeSaveEvent['action']
+): Promise<LeadLifecycleFollowup> {
+  const [locked] = await tx
+    .select()
+    .from(leadLifecycleFollowups)
+    .where(eq(leadLifecycleFollowups.id, followupId))
+    .for('update');
+
+  if (!locked) {
+    throw new Error('Followup not found');
+  }
+  if (locked.status !== 'pending') {
+    logOutcomeSaveEvent({
+      action: logAction,
+      followupId,
+      status: 'conflict',
+      reason: 'not_pending',
+      error: `Followup status is ${locked.status}`,
+    });
+    throw new Error('Followup is not pending');
+  }
+
+  return locked;
+}
+
+async function updatePendingFollowupOrThrow(
+  tx: FeedbackDbTransaction,
+  followupId: string,
+  updates: Partial<typeof leadLifecycleFollowups.$inferInsert>,
+  logAction: OutcomeSaveEvent['action']
+): Promise<void> {
+  const [updated] = await tx
+    .update(leadLifecycleFollowups)
+    .set(updates)
+    .where(
+      and(eq(leadLifecycleFollowups.id, followupId), eq(leadLifecycleFollowups.status, 'pending'))
+    )
+    .returning({ id: leadLifecycleFollowups.id });
+
+  if (!updated) {
+    logOutcomeSaveEvent({
+      action: logAction,
+      followupId,
+      status: 'conflict',
+      reason: 'conditional_update_missed',
+      error: 'Followup is not pending',
+    });
+    throw new Error('Followup is not pending');
+  }
 }
 
 export async function createLifecycleForLead(params: {
@@ -193,10 +249,10 @@ export async function recordFollowupAttemptOutcome(params: {
     .where(eq(leadLifecycleFollowups.id, followupId));
 
   if (!row) throw new Error('Followup not found');
-  if (row.followup.status !== 'pending') throw new Error('Followup is not pending');
 
   return db.transaction(async (tx) => {
-    const isOverdue = isFollowupOverdue(row.followup.scheduled_date, now);
+    const lockedFollowup = await lockPendingFollowup(tx, followupId, 'followup_outcome');
+    const isOverdue = isFollowupOverdue(lockedFollowup.scheduled_date, now);
 
     const [attempt] = await tx
       .insert(leadLifecycleFollowupAttempts)
@@ -221,28 +277,28 @@ export async function recordFollowupAttemptOutcome(params: {
       customer_number: row.customer.phone,
       attempt_outcome: outcome,
       attempt_notes: notes,
-      scheduled_date_at_attempt: row.followup.scheduled_date,
+      scheduled_date_at_attempt: lockedFollowup.scheduled_date,
       was_overdue: isOverdue,
       lead_type: row.lead.lead_type,
-      followup_number: row.followup.followup_number,
+      followup_number: lockedFollowup.followup_number,
       ingest_source: 'attempt_api',
       ingest_status: 'partial',
       raw_payload: null,
       updated_at: now,
     });
 
-    const attemptCountAfter = row.followup.attempt_count + 1;
+    const attemptCountAfter = lockedFollowup.attempt_count + 1;
     const transition = computeNonConnectedTransition({
       outcome,
       attemptCountAfter,
-      maxAttempts: row.followup.max_attempts,
+      maxAttempts: lockedFollowup.max_attempts,
     });
 
     const followupUpdates: Partial<typeof leadLifecycleFollowups.$inferInsert> = {
       attempt_count: attemptCountAfter,
       status: transition.nextTouchStatus,
-      first_attempt_date: row.followup.first_attempt_date ?? now,
-      remarks: notes ?? row.followup.remarks,
+      first_attempt_date: lockedFollowup.first_attempt_date ?? now,
+      remarks: notes ?? lockedFollowup.remarks,
       updated_at: now,
     };
 
@@ -254,13 +310,13 @@ export async function recordFollowupAttemptOutcome(params: {
         const stage = getStageConfig(
           resolved.config.config,
           resolved.leadType,
-          row.followup.followup_number
+          lockedFollowup.followup_number
         );
         const nextScheduled = computeScheduledDateForAttempt({
           stage,
           global: resolved.config.config.global,
           nextAttemptCount: attemptCountAfter + 1,
-          anchorDate: row.followup.scheduled_date,
+          anchorDate: lockedFollowup.scheduled_date,
           lastAttemptDate: now,
         });
         followupUpdates.scheduled_date = nextScheduled;
@@ -268,14 +324,14 @@ export async function recordFollowupAttemptOutcome(params: {
       followupUpdates.status = 'pending';
     }
 
-    await tx.update(leadLifecycleFollowups).set(followupUpdates).where(eq(leadLifecycleFollowups.id, followupId));
+    await updatePendingFollowupOrThrow(tx, followupId, followupUpdates, 'followup_outcome');
 
     const lifecycleUpdates: Partial<typeof leadLifecycles.$inferInsert> = {
       updated_at: now,
     };
     const leadUpdates: Partial<typeof leads.$inferInsert> = {
       activity_status: transition.nextActivityStatus,
-      current_followup_number: row.followup.followup_number,
+      current_followup_number: lockedFollowup.followup_number,
       current_touch_status: transition.nextTouchStatus,
       updated_at: now,
     };
@@ -331,7 +387,6 @@ export async function recordConnectedOutcome(params: {
     .where(eq(leadLifecycleFollowups.id, followupId));
 
   if (!row) throw new Error('Followup not found');
-  if (row.followup.status !== 'pending') throw new Error('Followup is not pending');
 
   const leadType = row.lead.lead_type;
   const resolved = await resolveConfigForLeadLifecycle(row.lifecycle.id);
@@ -358,6 +413,8 @@ export async function recordConnectedOutcome(params: {
   }
 
   return db.transaction(async (tx) => {
+    const lockedFollowup = await lockPendingFollowup(tx, followupId, 'connected_outcome');
+
     const hasIssueAdvancedOnce =
       choice === 'issue_with_product'
         ? (
@@ -382,7 +439,7 @@ export async function recordConnectedOutcome(params: {
       attempt_date: now,
       outcome: 'connected',
       notes,
-      was_overdue: isFollowupOverdue(row.followup.scheduled_date, now),
+      was_overdue: isFollowupOverdue(lockedFollowup.scheduled_date, now),
       })
       .returning();
 
@@ -390,17 +447,17 @@ export async function recordConnectedOutcome(params: {
       customer_id: row.customer.id,
       lead_id: row.lead.id,
       lifecycle_id: row.lifecycle.id,
-      followup_id: row.followup.id,
+      followup_id: lockedFollowup.id,
       attempt_id: attempt.id,
       dt_id: dtId,
       provider: 'exotel',
       customer_number: row.customer.phone,
       attempt_outcome: 'connected',
       attempt_notes: notes,
-      scheduled_date_at_attempt: row.followup.scheduled_date,
-      was_overdue: isFollowupOverdue(row.followup.scheduled_date, now),
+      scheduled_date_at_attempt: lockedFollowup.scheduled_date,
+      was_overdue: isFollowupOverdue(lockedFollowup.scheduled_date, now),
       lead_type: row.lead.lead_type,
-      followup_number: row.followup.followup_number,
+      followup_number: lockedFollowup.followup_number,
       ingest_source: 'attempt_api',
       ingest_status: 'partial',
       raw_payload: null,
@@ -413,7 +470,7 @@ export async function recordConnectedOutcome(params: {
       payload.is_testimonial === true || feedbackForm?.testimonial_comfortable === 'Yes';
 
     const connectedPayload = {
-      ...(row.followup.payload ?? {}),
+      ...(lockedFollowup.payload ?? {}),
       connected_choice: choice,
       review_screenshot_url: payload.review_screenshot_url ?? null,
       review_remark: payload.review_remark ?? null,
@@ -424,39 +481,41 @@ export async function recordConnectedOutcome(params: {
       feedback_form: feedbackForm,
       escalated: choice === 'issue_with_product',
       issue_advanced_once: choice === 'issue_with_product' ? !hasIssueAdvancedOnce : null,
-      objective: getCallObjective(row.lead.lead_type, row.followup.followup_number, configBundle),
+      objective: getCallObjective(row.lead.lead_type, lockedFollowup.followup_number, configBundle),
     };
 
-    await tx
-      .update(leadLifecycleFollowups)
-      .set({
+    await updatePendingFollowupOrThrow(
+      tx,
+      followupId,
+      {
         status: 'connected',
         connected_date: now,
         payload: connectedPayload,
-        attempt_count: row.followup.attempt_count + 1,
-        first_attempt_date: row.followup.first_attempt_date ?? now,
-        remarks: notes ?? row.followup.remarks,
+        attempt_count: lockedFollowup.attempt_count + 1,
+        first_attempt_date: lockedFollowup.first_attempt_date ?? now,
+        remarks: notes ?? lockedFollowup.remarks,
         updated_at: now,
-      })
-      .where(eq(leadLifecycleFollowups.id, followupId));
+      },
+      'connected_outcome'
+    );
 
     const baseTransition = computeConnectedTransition(choice, leadType);
     const transition =
       choice === 'issue_with_product' &&
       shouldAdvanceIssueWithProduct({
         hasIssueAdvancedOnce,
-        followupNumber: row.followup.followup_number,
+        followupNumber: lockedFollowup.followup_number,
         leadType,
       })
         ? { nextActivityStatus: 'active' as const, advanceStage: true }
         : baseTransition;
     const nextFollowupNumber = transition.advanceStage
-      ? Math.min(row.followup.followup_number + 1, maxFollowupNumber)
-      : row.followup.followup_number;
+      ? Math.min(lockedFollowup.followup_number + 1, maxFollowupNumber)
+      : lockedFollowup.followup_number;
 
     let nextFollowupId: string | null = null;
-    if (transition.advanceStage && row.followup.followup_number < maxFollowupNumber) {
-      const insertedFollowupNumber = row.followup.followup_number + 1;
+    if (transition.advanceStage && lockedFollowup.followup_number < maxFollowupNumber) {
+      const insertedFollowupNumber = lockedFollowup.followup_number + 1;
       const nextStage = getStageConfig(configBundle, leadType, insertedFollowupNumber);
       const [nextFollowup] = await tx
         .insert(leadLifecycleFollowups)
@@ -467,7 +526,7 @@ export async function recordConnectedOutcome(params: {
           scheduled_date: scheduleNextFollowupFromConnected({
             referenceDate: now,
             brand: row.lead.brand,
-            currentFollowupNumber: row.followup.followup_number,
+            currentFollowupNumber: lockedFollowup.followup_number,
             bundle: configBundle,
             stageDaysAfterPriorConnection: nextStage.daysAfterPriorConnection,
           }),
@@ -484,7 +543,7 @@ export async function recordConnectedOutcome(params: {
     }
 
     const lifecycleIsCompleted =
-      !transition.advanceStage || row.followup.followup_number >= maxFollowupNumber;
+      !transition.advanceStage || lockedFollowup.followup_number >= maxFollowupNumber;
     await tx
       .update(leadLifecycles)
       .set({

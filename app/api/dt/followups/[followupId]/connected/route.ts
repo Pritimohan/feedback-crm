@@ -9,6 +9,7 @@ import { isConnectedChoice, type ConnectedChoicePayload } from '@/lib/lifecycle/
 import { sendConnectedIssueRowToGoogleSheet } from '@/lib/services/googleSheetWebhook';
 import { recordConnectedOutcome } from '@/lib/services/leadLifecycleEngine';
 import { getLeadFollowupDetails } from '@/lib/services/leadFollowupQueryService';
+import { logOutcomeSaveEvent } from '@/lib/utils/outcomeSaveLog';
 
 interface ConnectedBody {
   choice: string;
@@ -25,6 +26,11 @@ function resolveSheetName(brand: string | null | undefined): 'fitelo' | 'fitty' 
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ followupId: string }> }) {
+  const startedAt = Date.now();
+  let followupId: string | undefined;
+  let choice: string | undefined;
+  let dtId: string | undefined;
+
   try {
     const session = await getSession();
     if (!session) {
@@ -35,7 +41,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ fo
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { followupId } = await context.params;
+    const { followupId: resolvedFollowupId } = await context.params;
+    followupId = resolvedFollowupId;
+    dtId = session.id;
     const brand = await getCrmBrandFromCookie();
     const existing = await getLeadFollowupDetails(followupId);
     if (!existing || !leadDbBrandMatchesCrmFilter(existing.lead.brand, brand)) {
@@ -43,6 +51,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ fo
     }
 
     const body = (await request.json()) as ConnectedBody;
+    choice = body.choice;
 
     if (!isConnectedChoice(body.choice)) {
       return NextResponse.json({ error: 'Invalid connected choice' }, { status: 400 });
@@ -89,12 +98,35 @@ export async function POST(request: NextRequest, context: { params: Promise<{ fo
       }
     }
 
+    logOutcomeSaveEvent({
+      action: 'connected_outcome',
+      followupId,
+      dtId,
+      choice: body.choice,
+      status: 'success',
+      durationMs: Date.now() - startedAt,
+    });
+
     return NextResponse.json(result);
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    const isConflict = errorMessage === 'Followup is not pending';
+
+    logOutcomeSaveEvent({
+      action: 'connected_outcome',
+      followupId: followupId ?? 'unknown',
+      dtId,
+      choice,
+      status: isConflict ? 'conflict' : 'error',
+      reason: isConflict ? 'duplicate_or_race' : undefined,
+      durationMs: Date.now() - startedAt,
+      error: errorMessage,
+    });
+
     console.error('Record connected outcome error:', error);
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: errorMessage,
       },
       { status: 400 }
     );
