@@ -1,7 +1,11 @@
+import type { CrmBrand } from '@/lib/crmBrand.shared';
+import { resolveExotelExophone } from '@/lib/services/exotelExophone';
+
 export interface ExotelCallRequest {
   from: string;
   to: string;
   callerId?: string;
+  brand?: CrmBrand;
 }
 
 export interface ExotelCallResponse {
@@ -96,7 +100,7 @@ export async function connectCall(request: ExotelCallRequest): Promise<ExotelCal
   const apiKey = getEnv('EXOTEL_API_KEY');
   const apiToken = getEnv('EXOTEL_API_TOKEN');
   const subdomain = getEnv('EXOTEL_SUBDOMAIN');
-  const exophone = request.callerId || getEnv('EXOTEL_EXOPHONE');
+  const exophone = resolveExotelExophone(request.brand ?? 'fitty', request.callerId);
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').replace(/\/$/, '');
 
   const from = normalizePhone(request.from);

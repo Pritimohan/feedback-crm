@@ -25,6 +25,7 @@ import { CheckCircleOutlined, CloseCircleOutlined, MailOutlined, PhoneOutlined, 
 import dayjs from 'dayjs';
 import CallButton from '@/components/dt/CallButton';
 import { FeedbackConnectedForm } from '@/components/dt/FeedbackConnectedForm';
+import { parseCrmBrand } from '@/lib/crmBrand.shared';
 import {
   formatFeedbackFormForDisplay,
   sanitizeFeedbackFormPayload,
@@ -593,7 +594,11 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
                     <Text>
                       <PhoneOutlined /> {customer.phone}
                     </Text>
-                    <CallButton customerPhone={customer.phone} customerId={customer.id} />
+                    <CallButton
+                      customerPhone={customer.phone}
+                      customerId={customer.id}
+                      brand={parseCrmBrand(lead.brand)}
+                    />
                   </Space>
                   {customer.email ? (
                     <Text>

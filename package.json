@@ -26,6 +26,7 @@
     "test:followup-priority": "tsx lib/dt/run-feedback-priority-tests.ts",
     "test:feedback-import": "tsx scripts/test-feedback-import.ts",
     "test:feedback-form": "tsx scripts/test-feedback-form-schema.ts",
+    "test:exotel-exophone": "tsx lib/services/exotelExophone.test.ts",
     "export:issue-with-product": "tsx scripts/export-issue-with-product-clients.ts"
   },
   "dependencies": {
