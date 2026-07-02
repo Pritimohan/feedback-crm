@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Typography, Card, Form, Input, Button, Alert, Space, Tag, Divider, App } from 'antd';
 import { PhoneOutlined } from '@ant-design/icons';
+import { useCrmBrand } from '@/components/providers/BrandProvider';
+import { brandDisplayName } from '@/components/admin/LeadTypePills';
 
 const { Title, Paragraph, Text } = Typography;
 const STORAGE_KEY = 'fitty.agentPhone';
@@ -10,6 +12,7 @@ interface CallResult { success: boolean; callSid?: string; status?: string; erro
 
 export default function TestCallPage() {
   const { message } = App.useApp();
+  const { brand } = useCrmBrand();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CallResult | null>(null);
@@ -33,7 +36,10 @@ export default function TestCallPage() {
   return (
     <div style={{ maxWidth: 560 }}>
       <Title level={2}>Test Call</Title>
-      <Paragraph type="secondary">Manually enter phone numbers to test the Exotel call flow without pulling a real client from the database.</Paragraph>
+      <Paragraph type="secondary">
+        Manually enter phone numbers to test the Exotel call flow without pulling a real client from the
+        database. Calls without a customer ID use the current brand ({brandDisplayName(brand)}) exophone.
+      </Paragraph>
       <Card>
         <Form form={form} layout="vertical" onFinish={(v) => void handleSubmit(v)} requiredMark={false}>
           <Form.Item label="From — Agent Phone" name="agentPhone" rules={[{ required: true, message: 'Enter the agent phone number' }]} extra="Your phone number. Saved locally for next time.">

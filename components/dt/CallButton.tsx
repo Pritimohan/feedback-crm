@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react';
 import { App, Button, Input, Modal, Tooltip } from 'antd';
 import { PhoneOutlined } from '@ant-design/icons';
 import type { ButtonProps } from 'antd';
+import type { CrmBrand } from '@/lib/crmBrand.shared';
 
 interface CallButtonProps {
   customerPhone: string;
   customerId?: string;
+  brand?: CrmBrand;
   agentPhone?: string;
   buttonRef?: React.Ref<HTMLButtonElement>;
   buttonProps?: ButtonProps;
@@ -18,6 +20,7 @@ const STORAGE_KEY = 'feedbackCRM.agentPhone';
 export default function CallButton({
   customerPhone,
   customerId,
+  brand,
   agentPhone,
   buttonRef,
   buttonProps,

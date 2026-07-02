@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectCall } from '@/lib/services/exotel';
-import { getSession } from '@/lib/auth/session';
+import { resolveCallBrand } from '@/lib/services/callBrandResolver';
 import { createOrUpdateAdhocCallLogBySid } from '@/lib/services/callLogService';
+import { connectCall } from '@/lib/services/exotel';
+import { resolveExotelExophone } from '@/lib/services/exotelExophone';
+import { getSession } from '@/lib/auth/session';
 
 interface CallRequestBody {
   agentPhone?: string;
@@ -27,9 +29,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const brand = await resolveCallBrand(body.customerId || null);
+    const exophone = resolveExotelExophone(brand);
+
     const exotelResponse = await connectCall({
       from: agentPhone,
       to: customerPhone,
+      brand,
     });
 
     const callSid = exotelResponse.callSid?.trim();
@@ -51,6 +57,7 @@ export async function POST(request: NextRequest) {
       dtPhone: agentPhone,
       customerPhone,
       customerId: body.customerId || null,
+      exotelNumber: exophone,
       providerStatusRaw: exotelResponse.status || 'initiated',
       rawPayload: exotelResponse.raw,
     });

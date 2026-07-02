@@ -151,6 +151,7 @@ export async function createOrUpdateAdhocCallLogBySid(params: {
   customerPhone: string;
   dtPhone?: string;
   customerId?: string | null;
+  exotelNumber?: string | null;
   providerStatusRaw?: string;
   rawPayload?: unknown;
 }) {
@@ -195,6 +196,7 @@ export async function createOrUpdateAdhocCallLogBySid(params: {
         provider_status_raw: params.providerStatusRaw ?? null,
         dt_number: params.dtPhone ?? null,
         customer_number: params.customerPhone,
+        exotel_number: params.exotelNumber ?? null,
         ingest_source: 'exotel_webhook',
         ingest_status: 'enriched',
         raw_payload: params.rawPayload as Record<string, unknown> | undefined,
@@ -219,6 +221,7 @@ export async function createOrUpdateAdhocCallLogBySid(params: {
       provider_status_raw: params.providerStatusRaw ?? 'initiated',
       dt_number: params.dtPhone ?? null,
       customer_number: params.customerPhone,
+      exotel_number: params.exotelNumber ?? null,
       attempt_outcome: 'initiated',
       lead_type: activeLead.leadType,
       followup_number: activeLead.followupNumber ?? 0,
