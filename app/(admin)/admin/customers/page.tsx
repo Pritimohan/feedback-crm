@@ -20,18 +20,23 @@ import {
 } from 'antd';
 import type { MenuProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { UserOutlined, PhoneOutlined, MailOutlined, EllipsisOutlined } from '@ant-design/icons';
+import { UserOutlined, PhoneOutlined, MailOutlined, EllipsisOutlined, DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import FollowupModal from '@/components/dt/FollowupModal';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 import {
-  MARKETPLACE_FILTER_OPTIONS,
-  matchesMarketplaceFilter,
-} from '@/lib/utils/marketplaceSources';
+  applyCustomerListFilters,
+  customerListFiltersToSearchParams,
+  type CustomerListFilterParams,
+  type LeadTypeFilter,
+  type LifecycleStageFilter,
+} from '@/lib/utils/customerListFilters';
+import { MARKETPLACE_FILTER_OPTIONS } from '@/lib/utils/marketplaceSources';
+import type { CustomerListRow } from '@/lib/services/customerListService';
 
 const { Title, Paragraph, Text } = Typography;
 const { Search } = Input;
-interface Customer { id: string; name: string; phone: string; email: string; leadType?: 'review' | 'nps' | 'feedback' | null; currentLifecycleStage: string; currentFollowupStage?: number | null; ltvScore: string; lastOrderDate: string; createdAt: string; assignedDtId: string | null; latestProductName?: string | null; sku?: string | null; source?: string | null; variant?: string | null; brand?: 'fitty' | 'fitelo' | null; }
+type Customer = CustomerListRow & { brand?: 'fitty' | 'fitelo' | null };
 interface DT { id: string; name: string; email: string; }
 interface Order { productName?: string | null; totalAmount?: string | null; quantity?: number | null; orderDate?: string | Date | null; deliveryStatus?: string | null; }
 interface Interaction { timestamp: string; structuredData: Record<string, unknown> | null; outcome?: string | null; recordingUrl?: string | null; dt?: { name?: string | null } | null; followupNumber?: number | null; formData?: Record<string, unknown> | null; }
@@ -54,6 +59,7 @@ export default function AllCustomersPage() {
   const [selectedFollowupId, setSelectedFollowupId] = useState<string | null>(null);
   const [followupModalVisible, setFollowupModalVisible] = useState(false);
   const [openingFollowupForCustomerId, setOpeningFollowupForCustomerId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const FOLLOWUP_STAGE_OPTIONS = [
@@ -79,10 +85,16 @@ export default function AllCustomersPage() {
       const dtMap = new Map<string, DT>(); dtsData.forEach((dt: DT) => { dtMap.set(dt.id, dt); });
       const nextCustomers = customersData.customers || [];
       setCustomers(nextCustomers);
-      let filtered = nextCustomers as Customer[];
-      if (selectedLeadType) filtered = filtered.filter((c) => c.leadType === selectedLeadType);
-      if (selectedMarketplace) filtered = filtered.filter((c) => matchesMarketplaceFilter(c.source, selectedMarketplace));
-      setFilteredCustomers(filtered);
+      setFilteredCustomers(
+        applyCustomerListFilters(nextCustomers, {
+          search: searchText || null,
+          leadType: selectedLeadType,
+          marketplace: selectedMarketplace,
+          assignedDtId: selectedDietitianId,
+          lifecycleStage: selectedLifecycleStage as LifecycleStageFilter | null,
+          followupStage: selectedFollowupStage,
+        })
+      );
       setDietitians(dtMap);
     } catch (error) {
       console.error('Error fetching data:', error); message.error('Failed to load data');
@@ -90,22 +102,62 @@ export default function AllCustomersPage() {
   }, [message, selectedLeadType, selectedMarketplace]);
   useEffect(() => { void fetchData(); }, [fetchData]);
 
+  const getCurrentFilters = (): CustomerListFilterParams => ({
+    search: searchText || null,
+    leadType: selectedLeadType,
+    marketplace: selectedMarketplace,
+    assignedDtId: selectedDietitianId,
+    lifecycleStage: selectedLifecycleStage as LifecycleStageFilter | null,
+    followupStage: selectedFollowupStage,
+  });
+
   const applyFilters = (
     search: string,
     dtId: string | null,
     stage: string | null,
     followupStage: number | null,
-    leadType: 'review' | 'nps' | 'feedback' | null,
+    leadType: LeadTypeFilter | null,
     marketplace: string | null
   ) => {
-    let filtered = customers;
-    if (search) filtered = filtered.filter((customer) => customer.name.toLowerCase().includes(search.toLowerCase()) || customer.phone.includes(search) || (customer.email && customer.email.toLowerCase().includes(search.toLowerCase())));
-    if (dtId) filtered = filtered.filter((customer) => customer.assignedDtId === dtId);
-    if (stage) filtered = filtered.filter((customer) => customer.currentLifecycleStage === stage);
-    if (followupStage !== null) filtered = filtered.filter((customer) => customer.currentFollowupStage === followupStage);
-    if (leadType) filtered = filtered.filter((customer) => customer.leadType === leadType);
-    if (marketplace) filtered = filtered.filter((customer) => matchesMarketplaceFilter(customer.source, marketplace));
-    setFilteredCustomers(filtered);
+    setFilteredCustomers(
+      applyCustomerListFilters(customers, {
+        search: search || null,
+        leadType,
+        marketplace,
+        assignedDtId: dtId,
+        lifecycleStage: stage as LifecycleStageFilter | null,
+        followupStage,
+      })
+    );
+  };
+
+  const exportCsv = async () => {
+    try {
+      setExporting(true);
+      const params = customerListFiltersToSearchParams(getCurrentFilters());
+      const response = await fetch(`/api/admin/customers/export?${params.toString()}`);
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result?.error || 'Failed to export customers');
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') ?? '';
+      const filenameMatch = disposition.match(/filename="([^"]+)"/);
+      const filename = filenameMatch?.[1] ?? `customers-export-${Date.now()}.csv`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      const rowCount = response.headers.get('X-Export-Row-Count');
+      message.success(rowCount ? `Exported ${rowCount} rows` : 'Export complete');
+    } catch (error) {
+      console.error('Error exporting customers:', error);
+      message.error(error instanceof Error ? error.message : 'Failed to export customers');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleRowClick = async (customerId: string) => {
@@ -187,6 +239,9 @@ export default function AllCustomersPage() {
         <Select placeholder="Filter by Agent" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedDietitianId(next); applyFilters(searchText, next, selectedLifecycleStage, selectedFollowupStage, selectedLeadType, selectedMarketplace); }} value={selectedDietitianId} options={[...Array.from(dietitians.values()).map((dt) => ({ label: dt.name, value: dt.id }))]} />
         <Select placeholder="Filter by Lifecycle Stage" allowClear style={{ width: 180 }} onChange={(v) => { const next = v ?? null; setSelectedLifecycleStage(next); applyFilters(searchText, selectedDietitianId, next, selectedFollowupStage, selectedLeadType, selectedMarketplace); }} value={selectedLifecycleStage} options={LIFECYCLE_FILTER_OPTIONS} />
         <Select placeholder="Filter by follow-up stage" allowClear style={{ width: 200 }} onChange={(v) => { const next = v ?? null; setSelectedFollowupStage(next); applyFilters(searchText, selectedDietitianId, selectedLifecycleStage, next, selectedLeadType, selectedMarketplace); }} value={selectedFollowupStage} options={FOLLOWUP_STAGE_OPTIONS} />
+        <Button icon={<DownloadOutlined />} loading={exporting} onClick={() => void exportCsv()}>
+          Export CSV
+        </Button>
       </Space>
       <Table columns={columns} dataSource={filteredCustomers} loading={loading} rowKey="id" onRow={(record) => ({ onClick: () => void handleRowClick(record.id), style: { cursor: 'pointer' } })} pagination={{ pageSize: 20, showTotal: (total) => `Total ${total} customers` }} />
       <Drawer title="Customer 360 View" placement="right" size={720} open={drawerVisible} onClose={() => setDrawerVisible(false)}>
