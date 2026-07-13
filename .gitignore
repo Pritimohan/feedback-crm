@@ -42,3 +42,7 @@ next-env.d.ts
 
 # generated exports
 /export/
+
+# database dumps (local migration artifacts)
+/backups/
+*.dump

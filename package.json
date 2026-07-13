@@ -20,6 +20,8 @@
     "user:create": "tsx scripts/create-user.ts",
     "redistribute-leads": "tsx scripts/redistribute-leads-round-robin.ts",
     "redistribute-leads:apply": "tsx scripts/redistribute-leads-round-robin.ts --execute",
+    "transfer-active-calls": "tsx scripts/transfer-active-calls.ts",
+    "transfer-active-calls:apply": "tsx scripts/transfer-active-calls.ts --execute",
     "test:rebalance": "tsx lib/rebalance/run-rebalance-tests.ts",
     "test:dt-brand-profile": "tsx lib/services/run-dt-brand-profile-tests.ts",
     "dry-run:nightly-redistribute-stage0": "tsx scripts/dry-run-nightly-redistribute-stage0.ts",
