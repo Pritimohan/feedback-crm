@@ -57,7 +57,7 @@ export function LifecycleStageCard({
 
       {expanded && (
         <div style={{ marginTop: 16 }}>
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <Form.Item label="Max Attempts" style={{ marginBottom: 8 }}>
               <Select
                 value={stage.maxAttempts}
