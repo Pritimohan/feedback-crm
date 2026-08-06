@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     const brand = await resolveCallBrand(body.customerId || null);
-    const exophone = resolveExotelExophone(brand);
+    const exophone = await resolveExotelExophone(brand);
 
     const exotelResponse = await connectCall({
       from: agentPhone,

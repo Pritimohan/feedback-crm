@@ -15,6 +15,7 @@
     "test:lifecycle-config": "tsx lib/services/run-lifecycle-config-tests.ts",
     "test:scheduling-dates": "tsx lib/utils/schedulingDates.test.ts",
     "db:migrate-lifecycle-config": "tsx scripts/run-lifecycle-config-settings-migration.ts",
+    "db:migrate-app-settings": "tsx scripts/run-app-settings-migration.ts",
     "test:duplicate-lifecycle": "tsx scripts/test-duplicate-customer-lifecycle-flow.ts",
     "seed:test": "tsx scripts/seed-test-data.ts",
     "user:create": "tsx scripts/create-user.ts",
