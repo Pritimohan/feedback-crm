@@ -54,7 +54,7 @@ export function LifecycleScheduleStep({
         style={{ marginBottom: 16 }}
         message="Global timing"
         description={
-          <Space direction="vertical" style={{ width: '100%', marginTop: 8 }}>
+          <Space orientation="vertical" style={{ width: '100%', marginTop: 8 }}>
             <Form.Item label="Retry gap (busy / no answer)" style={{ marginBottom: 8 }}>
               <DaysInput
                 value={globalSettings.retryAfterDays}

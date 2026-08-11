@@ -8,3 +8,4 @@ export * from './lifecycleConfigSettings';
 export * from './leadLifecycles';
 export * from './leadLifecycleFollowups';
 export * from './leadLifecycleFollowupAttempts';
+export * from './appSettings';

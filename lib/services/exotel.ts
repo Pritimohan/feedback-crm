@@ -100,7 +100,7 @@ export async function connectCall(request: ExotelCallRequest): Promise<ExotelCal
   const apiKey = getEnv('EXOTEL_API_KEY');
   const apiToken = getEnv('EXOTEL_API_TOKEN');
   const subdomain = getEnv('EXOTEL_SUBDOMAIN');
-  const exophone = resolveExotelExophone(request.brand ?? 'fitty', request.callerId);
+  const exophone = await resolveExotelExophone(request.brand ?? 'fitty', request.callerId);
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || '').replace(/\/$/, '');
 
   const from = normalizePhone(request.from);

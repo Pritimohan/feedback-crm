@@ -258,7 +258,7 @@ export function LifecycleConfigWizard() {
                       background: selected ? '#f0f5ff' : undefined,
                     }}
                   >
-                    <Space direction="vertical">
+                    <Space orientation="vertical">
                       {meta.icon}
                       <Title level={5} style={{ margin: 0 }}>
                         {meta.title}
