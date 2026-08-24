@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import {
   computeRetrySchedule,
   scheduleInitialFollowup,
+  scheduleInitialFollowupAfterDays,
   scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
 } from '../lib/lifecycle/leadLifecycleSchedule';
+import { FEEDBACK_FIRST_CALL_DELAY_DAYS } from '../lib/utils/lifecycleConstants';
 import { shouldAdvanceIssueWithProduct } from '../lib/services/leadLifecycleEngine';
 import { getMaxFollowupNumber } from '../lib/lifecycle/followupStageBounds';
 import {
@@ -73,6 +75,16 @@ function run() {
   assert.equal(nextDayAfterEveningAnchor.getDate(), 16);
   assert.equal(nextDayAfterEveningAnchor.getHours(), 9);
   assert.equal(nextDayAfterEveningAnchor.getMinutes(), 0);
+
+  const feedbackAfterThreeDays = scheduleInitialFollowupAfterDays(
+    new Date(2026, 4, 15, 15, 45, 0, 0),
+    FEEDBACK_FIRST_CALL_DELAY_DAYS
+  );
+  assert.equal(feedbackAfterThreeDays.getFullYear(), 2026);
+  assert.equal(feedbackAfterThreeDays.getMonth(), 4);
+  assert.equal(feedbackAfterThreeDays.getDate(), 18);
+  assert.equal(feedbackAfterThreeDays.getHours(), 9);
+  assert.equal(feedbackAfterThreeDays.getMinutes(), 0);
 
   const fittyStage0Next = scheduleNextFollowupFromConnected({
     referenceDate: now,

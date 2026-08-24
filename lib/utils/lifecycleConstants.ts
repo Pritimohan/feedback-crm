@@ -4,6 +4,8 @@ export const REVIEW_MAX_ATTEMPTS = 4;
 export const RETRY_AFTER_DAYS = 3;
 export const NEXT_DAY_RETRY_HOUR = 9;
 export const INITIAL_FOLLOWUP_CUTOFF_HOUR = 19;
+/** Calendar days after a new feedback lead is created before the first call is due (at nextDayRetryHour). */
+export const FEEDBACK_FIRST_CALL_DELAY_DAYS = 3;
 
 /** Time slots for busy reschedule (hour values for start of slot). */
 export const BUSY_RESCHEDULE_SLOTS = [

@@ -13,6 +13,7 @@ import {
   getRetryGapDays,
 } from '@/lib/services/lifecycleConfigService';
 import {
+  FEEDBACK_FIRST_CALL_DELAY_DAYS,
   INITIAL_FOLLOWUP_CUTOFF_HOUR,
   NEXT_DAY_RETRY_HOUR,
   RETRY_AFTER_DAYS,
@@ -24,6 +25,7 @@ import {
 } from '@/lib/utils/schedulingDates';
 import {
   scheduleInitialFollowup,
+  scheduleInitialFollowupAfterDays,
   scheduleInitialFollowupNextCalendarDay,
   scheduleNextFollowupFromConnected,
   computeRetrySchedule,
@@ -99,6 +101,14 @@ assertEq(atCutoff.getHours(), 9, 'at cutoff 9am');
 const nextCal = scheduleInitialFollowupNextCalendarDay(new Date(2026, 0, 1, 10, 0, 0));
 assertEq(nextCal.getDate(), 2, 'next calendar day schedule');
 assertEq(nextCal.getHours(), 9, 'next calendar day 9am');
+
+const feedbackFirstCall = scheduleInitialFollowupAfterDays(
+  new Date(2026, 0, 1, 15, 30, 0, 0),
+  FEEDBACK_FIRST_CALL_DELAY_DAYS
+);
+assertEq(feedbackFirstCall.getDate(), 4, 'feedback first call +3 days');
+assertEq(feedbackFirstCall.getHours(), 9, 'feedback first call 9am');
+assertEq(feedbackFirstCall.getMinutes(), 0, 'feedback first call minutes');
 
 const now = new Date('2026-01-01T10:00:00.000Z');
 const retry = computeRetrySchedule({ now, nextAttemptCount: 2, lastAttemptDate: now });

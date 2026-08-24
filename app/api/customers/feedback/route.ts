@@ -3,6 +3,7 @@ import {
   createOrEnsureCustomerLifecycle,
   type CreateCustomerInput,
 } from '@/lib/services/customerCreateService';
+import { FEEDBACK_FIRST_CALL_DELAY_DAYS } from '@/lib/utils/lifecycleConstants';
 
 function parseBrand(value: unknown): 'fitty' | 'fitelo' | null {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await createOrEnsureCustomerLifecycle(
-      { ...body, leadType: 'feedback', scheduleFirstCallNextCalendarDay: true },
+      { ...body, leadType: 'feedback', scheduleFirstCallAfterDays: FEEDBACK_FIRST_CALL_DELAY_DAYS },
       brand
     );
     if (result.status === 'created') {

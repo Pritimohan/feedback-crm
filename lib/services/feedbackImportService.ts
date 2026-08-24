@@ -4,6 +4,7 @@ import {
   type CreateCustomerInput,
 } from '@/lib/services/customerCreateService';
 import { normalizeIndianPhone } from '@/lib/utils/normalizeIndianPhone';
+import { FEEDBACK_FIRST_CALL_DELAY_DAYS } from '@/lib/utils/lifecycleConstants';
 
 export const FEEDBACK_IMPORT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const FEEDBACK_IMPORT_MAX_ROWS = 500;
@@ -263,7 +264,7 @@ export async function importFeedbackLeads(
         {
           ...input,
           leadType: 'feedback',
-          scheduleFirstCallNextCalendarDay: true,
+          scheduleFirstCallAfterDays: FEEDBACK_FIRST_CALL_DELAY_DAYS,
         },
         brand
       );

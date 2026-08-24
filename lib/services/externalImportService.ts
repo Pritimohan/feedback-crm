@@ -79,6 +79,7 @@ export async function resolveOrCreateLeadForCustomer(params: {
 
 export type EnsureLifecycleForLeadOptions = {
   scheduleFirstCallNextCalendarDay?: boolean;
+  scheduleFirstCallAfterDays?: number;
 };
 
 export async function ensureLifecycleForLead(
@@ -93,5 +94,6 @@ export async function ensureLifecycleForLead(
     lifecycleType: 'feedback_default',
     tx,
     scheduleFirstCallNextCalendarDay: options?.scheduleFirstCallNextCalendarDay,
+    scheduleFirstCallAfterDays: options?.scheduleFirstCallAfterDays,
   });
 }

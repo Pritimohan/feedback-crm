@@ -25,6 +25,8 @@ export interface CreateCustomerInput {
   anchorDate?: string;
   /** Server-set for warranty/dietplan: first follow-up on next calendar day at NEXT_DAY_RETRY_HOUR. */
   scheduleFirstCallNextCalendarDay?: boolean;
+  /** Server-set for feedback: first follow-up N calendar days later at NEXT_DAY_RETRY_HOUR. */
+  scheduleFirstCallAfterDays?: number;
 }
 
 export interface CreateCustomerResult {
@@ -159,6 +161,7 @@ export async function createCustomerWithAutoLeadLifecycle(
 
     const lcId = await ensureLifecycleForLead(newLead.id, input.anchorDate, tx, {
       scheduleFirstCallNextCalendarDay: input.scheduleFirstCallNextCalendarDay,
+      scheduleFirstCallAfterDays: input.scheduleFirstCallAfterDays,
     });
     return { customer: newCustomer, lead: newLead, lifecycleId: lcId };
   });
@@ -223,6 +226,7 @@ export async function ensureLifecycleForExistingCustomerByPhone(
     const lifecycleAlreadyActive = await hasActiveLifecycle(lead.id, tx);
     const lifecycleId = await ensureLifecycleForLead(lead.id, input.anchorDate, tx, {
       scheduleFirstCallNextCalendarDay: input.scheduleFirstCallNextCalendarDay,
+      scheduleFirstCallAfterDays: input.scheduleFirstCallAfterDays,
     });
     const lifecycleAction: EnsureCustomerLifecycleResult['lifecycle_action'] =
       lifecycleAlreadyActive ? 'already_active' : 'created';

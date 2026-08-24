@@ -6,6 +6,7 @@ import {
 } from '@/lib/services/lifecycleConfigService';
 import type { LifecycleConfigBundle, LifecycleGlobalSettings } from '@/lib/lifecycleDefaults';
 import {
+  FEEDBACK_FIRST_CALL_DELAY_DAYS,
   INITIAL_FOLLOWUP_CUTOFF_HOUR,
   NEXT_DAY_RETRY_HOUR,
   RETRY_AFTER_DAYS,
@@ -45,16 +46,25 @@ export function scheduleInitialFollowup(anchorDate: Date, bundle?: LifecycleConf
   });
 }
 
-/** First follow-up always the next calendar day at configured retry hour (warranty / dietplan APIs). */
-export function scheduleInitialFollowupNextCalendarDay(
+/** First follow-up N calendar days later at the configured retry hour. */
+export function scheduleInitialFollowupAfterDays(
   anchorDate: Date,
+  delayDays: number,
   bundle?: LifecycleConfigBundle
 ): Date {
   return computeInitialFollowupSchedule({
     anchorDate,
     global: getGlobal(bundle),
-    scheduleNextCalendarDay: true,
+    firstCallDelayDays: delayDays,
   });
+}
+
+/** First follow-up always the next calendar day at configured retry hour (warranty / dietplan APIs). */
+export function scheduleInitialFollowupNextCalendarDay(
+  anchorDate: Date,
+  bundle?: LifecycleConfigBundle
+): Date {
+  return scheduleInitialFollowupAfterDays(anchorDate, 1, bundle);
 }
 
 export function scheduleNextFollowupFromConnected(params: {
@@ -106,4 +116,9 @@ export function computeRetrySchedule(params: {
 }
 
 // Re-export constants for backward compatibility
-export { RETRY_AFTER_DAYS, NEXT_DAY_RETRY_HOUR, INITIAL_FOLLOWUP_CUTOFF_HOUR };
+export {
+  RETRY_AFTER_DAYS,
+  NEXT_DAY_RETRY_HOUR,
+  INITIAL_FOLLOWUP_CUTOFF_HOUR,
+  FEEDBACK_FIRST_CALL_DELAY_DAYS,
+};
