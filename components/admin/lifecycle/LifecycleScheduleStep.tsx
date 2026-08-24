@@ -45,7 +45,9 @@ export function LifecycleScheduleStep({
             use the brand-specific connected advance days from global settings.
           </>
         )}
-        {isSingleStage && <> Feedback leads use a single call stage.</>}
+        {isSingleStage && (
+          <> Feedback leads use a single call stage. The first call is scheduled 3 calendar days after the lead is created, at 9:00 AM.</>
+        )}
       </Paragraph>
 
       <Alert

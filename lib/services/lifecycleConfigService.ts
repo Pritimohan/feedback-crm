@@ -63,12 +63,14 @@ export function computeInitialFollowupSchedule(params: {
   anchorDate: Date;
   global: LifecycleGlobalSettings;
   scheduleNextCalendarDay?: boolean;
+  firstCallDelayDays?: number;
 }): Date {
-  const { anchorDate, global, scheduleNextCalendarDay } = params;
+  const { anchorDate, global, scheduleNextCalendarDay, firstCallDelayDays } = params;
+  const delayDays = firstCallDelayDays ?? (scheduleNextCalendarDay ? 1 : undefined);
 
-  if (scheduleNextCalendarDay) {
+  if (delayDays != null) {
     const scheduled = new Date(anchorDate);
-    scheduled.setDate(scheduled.getDate() + 1);
+    scheduled.setDate(scheduled.getDate() + delayDays);
     scheduled.setHours(global.nextDayRetryHour, 0, 0, 0);
     return scheduled;
   }
@@ -110,6 +112,7 @@ export function computeScheduledDateForAttempt(params: {
   anchorDate: Date;
   lastAttemptDate?: Date;
   scheduleNextCalendarDay?: boolean;
+  firstCallDelayDays?: number;
 }): Date {
   const {
     stage,
@@ -118,6 +121,7 @@ export function computeScheduledDateForAttempt(params: {
     anchorDate,
     lastAttemptDate,
     scheduleNextCalendarDay,
+    firstCallDelayDays,
   } = params;
 
   if (nextAttemptCount <= 1) {
@@ -132,6 +136,7 @@ export function computeScheduledDateForAttempt(params: {
         anchorDate,
         global,
         scheduleNextCalendarDay,
+        firstCallDelayDays,
       });
     }
 
@@ -288,6 +293,10 @@ async function recalcPendingFollowupSchedule(params: {
       scheduleNextCalendarDay:
         metadata?.schedule_first_call_next_calendar_day === true ||
         metadata?.anchor_reason === 'next_calendar_day',
+      firstCallDelayDays:
+        typeof metadata?.schedule_first_call_after_days === 'number'
+          ? metadata.schedule_first_call_after_days
+          : undefined,
     });
     return maxDate(scheduled, startOfToday);
   }

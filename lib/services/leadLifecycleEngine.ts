@@ -27,7 +27,7 @@ import {
 } from '@/lib/services/lifecycleConfigService';
 import {
   scheduleInitialFollowup,
-  scheduleInitialFollowupNextCalendarDay,
+  scheduleInitialFollowupAfterDays,
   scheduleNextFollowupFromConnected,
 } from '@/lib/lifecycle/leadLifecycleSchedule';
 import { sanitizeFeedbackFormPayload } from '@/lib/feedback/feedbackFormSchema';
@@ -121,6 +121,7 @@ export async function createLifecycleForLead(params: {
   templateVersion?: number;
   tx?: FeedbackDbTransaction;
   scheduleFirstCallNextCalendarDay?: boolean;
+  scheduleFirstCallAfterDays?: number;
 }) {
   const {
     leadId,
@@ -130,7 +131,10 @@ export async function createLifecycleForLead(params: {
     templateVersion,
     tx: outerTx,
     scheduleFirstCallNextCalendarDay,
+    scheduleFirstCallAfterDays,
   } = params;
+  const firstCallDelayDays =
+    scheduleFirstCallAfterDays ?? (scheduleFirstCallNextCalendarDay ? 1 : undefined);
   const now = new Date();
 
   const insertLifecycle = async (d: FeedbackDbTransaction) => {
@@ -166,15 +170,22 @@ export async function createLifecycleForLead(params: {
           template_key: templateKey ?? 'review_followup',
           template_version: templateVersion ?? activeConfig.version,
           anchor_at: anchorDate.toISOString(),
-          anchor_reason: scheduleFirstCallNextCalendarDay ? 'next_calendar_day' : 'manual_start',
-          schedule_first_call_next_calendar_day: scheduleFirstCallNextCalendarDay ?? false,
+          anchor_reason:
+            firstCallDelayDays === 1
+              ? 'next_calendar_day'
+              : firstCallDelayDays != null
+                ? 'delay_days'
+                : 'manual_start',
+          schedule_first_call_next_calendar_day: firstCallDelayDays === 1,
+          schedule_first_call_after_days: firstCallDelayDays ?? null,
         },
       })
       .returning();
 
-    const firstScheduledDate = scheduleFirstCallNextCalendarDay
-      ? scheduleInitialFollowupNextCalendarDay(anchorDate, activeConfig.config)
-      : scheduleInitialFollowup(anchorDate, activeConfig.config);
+    const firstScheduledDate =
+      firstCallDelayDays != null
+        ? scheduleInitialFollowupAfterDays(anchorDate, firstCallDelayDays, activeConfig.config)
+        : scheduleInitialFollowup(anchorDate, activeConfig.config);
 
     await d.insert(leadLifecycleFollowups).values({
       lifecycle_id: lifecycle.id,
