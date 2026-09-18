@@ -9,6 +9,7 @@ import { useCrmBrand } from '@/components/providers/BrandProvider';
 import { DtBrandProfileModal } from '@/components/admin/DtBrandProfileModal';
 import { EditUserModal } from '@/components/admin/EditUserModal';
 import { LeadTypePills, brandDisplayName, type LeadTypeValue } from '@/components/admin/LeadTypePills';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title } = Typography;
 
@@ -50,12 +51,14 @@ export default function UsersPage() {
     try {
       setLoading(true);
       const response = await fetch(`/api/admin/users?brand=${brand}`);
-      if (!response.ok) throw new Error('Failed to fetch users');
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to fetch users'));
+      }
       const data = await response.json();
       setAllUsers(data.data ?? []);
     } catch (error) {
       console.error('Error fetching users:', error);
-      message.error('Failed to load users');
+      message.error(toUserFacingMessage(error, 'Failed to load users'));
     } finally {
       setLoading(false);
     }
@@ -92,13 +95,15 @@ export default function UsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
       });
-      if (!response.ok) throw new Error((await response.json()).error || 'Failed to add user');
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to add user'));
+      }
       message.success(`${values.role === 'admin' ? 'Admin' : 'Agent'} added successfully`);
       setIsAddModalOpen(false);
       form.resetFields();
       void fetchUsers();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to add user');
+      message.error(toUserFacingMessage(error, 'Failed to add user'));
     } finally {
       setSubmitting(false);
     }
@@ -107,11 +112,13 @@ export default function UsersPage() {
   const handleDeleteUser = async (userId: string, userName: string) => {
     try {
       const response = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error((await response.json()).error || 'Failed to delete user');
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to delete user'));
+      }
       message.success(`${userName} removed successfully`);
       void fetchUsers();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to delete user');
+      message.error(toUserFacingMessage(error, 'Failed to delete user'));
     }
   };
 
@@ -169,11 +176,13 @@ export default function UsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active_status: !currentStatus }),
       });
-      if (!response.ok) throw new Error((await response.json()).error || 'Failed to update status');
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to update status'));
+      }
       message.success('Account status updated');
       void fetchUsers();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to update status');
+      message.error(toUserFacingMessage(error, 'Failed to update status'));
     }
   };
 
@@ -184,11 +193,13 @@ export default function UsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brand, is_active: !currentStatus }),
       });
-      if (!response.ok) throw new Error((await response.json()).error || 'Failed to update brand status');
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to update brand status'));
+      }
       message.success('Brand status updated');
       void fetchUsers();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to update brand status');
+      message.error(toUserFacingMessage(error, 'Failed to update brand status'));
     }
   };
 

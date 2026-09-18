@@ -18,6 +18,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { DownloadOutlined, InboxOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import type { CreateCustomerInput } from '@/lib/services/customerCreateService';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title, Paragraph, Text } = Typography;
 const { Dragger } = Upload;
@@ -88,8 +89,7 @@ export default function DataImportPage() {
     try {
       const response = await fetch('/api/admin/data-import/feedback/template');
       if (!response.ok) {
-        const json = await response.json().catch(() => ({}));
-        throw new Error(json.error || 'Failed to download template');
+        throw new Error(await getErrorFromResponse(response, 'Failed to download template'));
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -99,7 +99,7 @@ export default function DataImportPage() {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to download template');
+      message.error(toUserFacingMessage(error, 'Failed to download template'));
     }
   };
 
@@ -119,13 +119,15 @@ export default function DataImportPage() {
         method: 'POST',
         body: formData,
       });
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to preview file'));
+      }
       const json = await response.json();
-      if (!response.ok) throw new Error(json.error || 'Failed to preview file');
 
       setPreview(json as PreviewResponse);
       message.success(`Validated ${json.summary.total} rows`);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to preview file');
+      message.error(toUserFacingMessage(error, 'Failed to preview file'));
     } finally {
       setPreviewLoading(false);
     }
@@ -151,15 +153,17 @@ export default function DataImportPage() {
           })),
         }),
       });
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to import rows'));
+      }
       const json = await response.json();
-      if (!response.ok) throw new Error(json.error || 'Failed to import rows');
 
       setImportResult(json as ImportResponse);
       message.success(
         `Import complete: ${json.summary.created} created, ${json.summary.updated} updated, ${json.summary.already_active} already active, ${json.summary.failed} failed`
       );
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to import rows');
+      message.error(toUserFacingMessage(error, 'Failed to import rows'));
     } finally {
       setImportLoading(false);
     }

@@ -13,6 +13,7 @@ import {
   message,
 } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Text } = Typography;
 
@@ -52,13 +53,10 @@ export default function ExotelConfigForm() {
     try {
       setLoading(true);
       const response = await fetch('/api/admin/config/exotel');
-      const data = (await response.json()) as ExotelConfigResponse & {
-        error?: string;
-      };
-
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to load Exotel config');
+        throw new Error(await getErrorFromResponse(response, 'Failed to load Exotel config'));
       }
+      const data = (await response.json()) as ExotelConfigResponse;
 
       form.setFieldsValue({
         fitty: data.fitty?.exophone || '',
@@ -70,9 +68,7 @@ export default function ExotelConfigForm() {
       });
     } catch (error) {
       console.error('[ExotelConfigForm] load', error);
-      message.error(
-        error instanceof Error ? error.message : 'Failed to load Exotel config'
-      );
+      message.error(toUserFacingMessage(error, 'Failed to load Exotel config'));
     } finally {
       setLoading(false);
     }
@@ -93,11 +89,10 @@ export default function ExotelConfigForm() {
           fitelo: values.fitelo,
         }),
       });
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to save phone numbers');
+        throw new Error(await getErrorFromResponse(response, 'Failed to save phone numbers'));
       }
+      const data = await response.json();
 
       form.setFieldsValue({
         fitty: data.fitty,
@@ -113,9 +108,7 @@ export default function ExotelConfigForm() {
       message.success('Phone numbers saved');
     } catch (error) {
       console.error('[ExotelConfigForm] save', error);
-      message.error(
-        error instanceof Error ? error.message : 'Failed to save phone numbers'
-      );
+      message.error(toUserFacingMessage(error, 'Failed to save phone numbers'));
     } finally {
       setSaving(false);
     }

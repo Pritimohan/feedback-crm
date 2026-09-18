@@ -5,6 +5,7 @@ import { Typography, Card, Form, Input, Button, Alert, Space, Tag, Divider, App 
 import { PhoneOutlined } from '@ant-design/icons';
 import { useCrmBrand } from '@/components/providers/BrandProvider';
 import { brandDisplayName } from '@/components/admin/LeadTypePills';
+import { toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title, Paragraph, Text } = Typography;
 const STORAGE_KEY = 'fitty.agentPhone';
@@ -28,9 +29,22 @@ export default function TestCallPage() {
     if (typeof window !== 'undefined') window.localStorage.setItem(STORAGE_KEY, values.agentPhone.trim());
     try {
       const response = await fetch('/api/call', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agentPhone: values.agentPhone.trim(), customerPhone: values.customerPhone.trim(), customerId: values.customerId?.trim() || undefined }) });
-      const data = (await response.json()) as CallResult; setResult(data);
-      if (data.success) message.success('Call initiated successfully'); else message.error(data.error || 'Failed to initiate call');
-    } catch (err) { const errorMessage = err instanceof Error ? err.message : 'Network error'; setResult({ success: false, error: errorMessage }); message.error(errorMessage); } finally { setLoading(false); }
+      const data = (await response.json()) as CallResult;
+      if (data.success) {
+        setResult(data);
+        message.success('Call initiated successfully');
+      } else {
+        const errorMessage = toUserFacingMessage(data.error, 'Failed to initiate call');
+        setResult({ ...data, error: errorMessage });
+        message.error(errorMessage);
+      }
+    } catch (err) {
+      const errorMessage = toUserFacingMessage(err, 'Network error');
+      setResult({ success: false, error: errorMessage });
+      message.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -36,6 +36,7 @@ import { MAX_FOLLOWUP_NUMBER } from '@/lib/lifecycle/followupStageBounds';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
 import { BUSY_RESCHEDULE_SLOTS } from '@/lib/utils/lifecycleConstants';
 import { isDtSchedulingPickerDateDisabled } from '@/lib/utils/schedulingDates';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Text } = Typography;
 const MAX_REVIEW_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -272,8 +273,10 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
       try {
         setLoading(true);
         const res = await fetch(`/api/dt/followups/${followupId}`);
+        if (!res.ok) {
+          throw new Error(await getErrorFromResponse(res, 'Failed to load details'));
+        }
         const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Failed to load details');
         setDetails(json.data);
         setShowConnectedForm(false);
         setConnectedChoice(undefined);
@@ -290,7 +293,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         setBusyRescheduleDate(null);
         setBusyRescheduleSlot(null);
       } catch (error: unknown) {
-        message.error(error instanceof Error ? error.message : 'Failed to load followup details');
+        message.error(toUserFacingMessage(error, 'Failed to load followup details'));
       } finally {
         setLoading(false);
       }
@@ -329,13 +332,14 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ outcome: 'no_answer' }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to save no answer');
+      if (!res.ok) {
+        throw new Error(await getErrorFromResponse(res, 'Failed to save no answer'));
+      }
       message.success('No answer recorded');
       onSuccess();
       onClose();
     } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : 'Failed to save no answer');
+      message.error(toUserFacingMessage(error, 'Failed to save no answer'));
     } finally {
       endSubmit();
     }
@@ -349,13 +353,14 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ outcome }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || `Failed to save ${outcome}`);
+      if (!res.ok) {
+        throw new Error(await getErrorFromResponse(res, `Failed to save ${outcome}`));
+      }
       message.success(`${outcome.replace('_', ' ')} recorded`);
       onSuccess();
       onClose();
     } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : 'Failed to save outcome');
+      message.error(toUserFacingMessage(error, 'Failed to save outcome'));
     } finally {
       endSubmit();
     }
@@ -382,7 +387,6 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ outcome: 'busy' }),
       });
-      const json = await res.json();
       if (res.ok) {
         setShowBusyRescheduleModal(false);
         setBusyRescheduleDate(null);
@@ -390,10 +394,10 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         completeAfterBusyAction();
         message.success('Attempt recorded. Rescheduled per retry schedule.');
       } else {
-        message.error(json.error || 'Failed to record attempt');
+        message.error(await getErrorFromResponse(res, 'Failed to record attempt'));
       }
     } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : 'Failed to record attempt');
+      message.error(toUserFacingMessage(error, 'Failed to record attempt'));
     } finally {
       setBusySubmitting(false);
     }
@@ -424,7 +428,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
           preferred_scheduled_date: scheduledDateTime,
         }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (res.ok) {
         setShowBusyRescheduleModal(false);
         setBusyRescheduleDate(null);
@@ -437,10 +441,10 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
           message.success('Attempt recorded. Rescheduled for preferred time slot.');
         }
       } else {
-        message.error(json.error || 'Failed to record attempt');
+        message.error(toUserFacingMessage(json.error, 'Failed to record attempt'));
       }
     } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : 'Failed to record attempt');
+      message.error(toUserFacingMessage(error, 'Failed to record attempt'));
     } finally {
       setBusySubmitting(false);
     }
@@ -472,8 +476,7 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
           setReviewScreenshotPreviewUrl(uploaded.signedUrl);
           setReviewScreenshotFile(null);
         } catch (error: unknown) {
-          const uploadMessage =
-            error instanceof Error ? error.message : 'Failed to upload screenshot';
+          const uploadMessage = toUserFacingMessage(error, 'Failed to upload screenshot');
           throw new Error(`Screenshot upload failed — please try again. (${uploadMessage})`);
         } finally {
           setUploadingReviewScreenshot(false);
@@ -502,13 +505,14 @@ export default function FollowupModal({ followupId, visible, onClose, onSuccess 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ choice: connectedChoice, payload }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to save connected outcome');
+      if (!res.ok) {
+        throw new Error(await getErrorFromResponse(res, 'Failed to save connected outcome'));
+      }
       message.success('Connected outcome saved');
       onSuccess();
       onClose();
     } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : 'Failed to save connected outcome');
+      message.error(toUserFacingMessage(error, 'Failed to save connected outcome'));
     } finally {
       setUploadingReviewScreenshot(false);
       endSubmit();

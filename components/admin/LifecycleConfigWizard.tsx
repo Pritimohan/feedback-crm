@@ -30,6 +30,7 @@ import type {
   LeadTypeId,
 } from '@/lib/lifecycleDefaults';
 import { LifecycleScheduleStep } from '@/components/admin/lifecycle/LifecycleScheduleStep';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -96,16 +97,16 @@ export function LifecycleConfigWizard() {
         setLoading(true);
       }
       const response = await fetch('/api/admin/config/lifecycle');
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to load config');
-
-      const payload = data as LifecycleApiResponse;
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to load config'));
+      }
+      const payload = (await response.json()) as LifecycleApiResponse;
       setDraft(cloneBundle(payload.config));
       setDefaults(cloneBundle(payload.defaults));
       setVersion(payload.version);
       setUpdatedAt(payload.updatedAt);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to load lifecycle config');
+      message.error(toUserFacingMessage(error, 'Failed to load lifecycle config'));
     } finally {
       if (!options?.silent) {
         setLoading(false);
@@ -128,15 +129,17 @@ export function LifecycleConfigWizard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draft),
       });
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to save'));
+      }
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to save');
 
       message.success(`Lifecycle config saved (v${data.version})`);
       setVersion(data.version);
       setUpdatedAt(new Date().toISOString());
       setCurrentStep(0);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to save config');
+      message.error(toUserFacingMessage(error, 'Failed to save config'));
     } finally {
       setSaving(false);
     }
@@ -146,8 +149,10 @@ export function LifecycleConfigWizard() {
     try {
       setSaving(true);
       const response = await fetch('/api/admin/config/lifecycle/reset', { method: 'POST' });
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to reset'));
+      }
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to reset');
 
       message.success('Lifecycle config reset to defaults');
       setDraft(cloneBundle(data.config));
@@ -155,7 +160,7 @@ export function LifecycleConfigWizard() {
       setUpdatedAt(new Date().toISOString());
       setCurrentStep(0);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to reset config');
+      message.error(toUserFacingMessage(error, 'Failed to reset config'));
     } finally {
       setSaving(false);
     }

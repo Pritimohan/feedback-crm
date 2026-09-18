@@ -2,6 +2,7 @@
 
 import { App, Button, Card, Form, Input, Select, Space, Typography } from 'antd';
 import { useRouter } from 'next/navigation';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title, Paragraph } = Typography;
 
@@ -18,18 +19,20 @@ export default function NewAdminUserPage() {
   const router = useRouter();
 
   const onSubmit = async (values: CreateForm) => {
-    const res = await fetch('/api/admin/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
-    });
-    const body = await res.json();
-    if (!res.ok) {
-      message.error(body?.error || 'Failed to create user');
-      return;
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      });
+      if (!res.ok) {
+        throw new Error(await getErrorFromResponse(res, 'Failed to create user'));
+      }
+      message.success('User created');
+      router.push('/admin/users');
+    } catch (error) {
+      message.error(toUserFacingMessage(error, 'Failed to create user'));
     }
-    message.success('User created');
-    router.push('/admin/users');
   };
 
   return (

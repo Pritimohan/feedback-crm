@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { App, Button, Card, Form, Input, Select, Space, Switch, Typography } from 'antd';
 import { useParams, useRouter } from 'next/navigation';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title, Paragraph } = Typography;
 
@@ -28,8 +29,10 @@ export default function EditAdminUserPage() {
       try {
         setLoading(true);
         const res = await fetch(`/api/admin/users/${id}`);
+        if (!res.ok) {
+          throw new Error(await getErrorFromResponse(res, 'Failed to load user'));
+        }
         const body = await res.json();
-        if (!res.ok) throw new Error(body?.error || 'Failed to load user');
         form.setFieldsValue({
           name: body.data.name,
           email: body.data.email,
@@ -37,7 +40,7 @@ export default function EditAdminUserPage() {
           active_status: body.data.active_status,
         });
       } catch (error) {
-        messageApi.error(error instanceof Error ? error.message : 'Failed to load user');
+        messageApi.error(toUserFacingMessage(error, 'Failed to load user'));
       } finally {
         setLoading(false);
       }
@@ -61,12 +64,13 @@ export default function EditAdminUserPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error || 'Failed to update user');
+      if (!res.ok) {
+        throw new Error(await getErrorFromResponse(res, 'Failed to update user'));
+      }
       messageApi.success('User updated');
       router.push('/admin/users');
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message : 'Failed to update user');
+      messageApi.error(toUserFacingMessage(error, 'Failed to update user'));
     } finally {
       setSaving(false);
     }

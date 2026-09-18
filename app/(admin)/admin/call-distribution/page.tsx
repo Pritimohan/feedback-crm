@@ -5,6 +5,7 @@ import { Typography, Card, Table, Tag, Spin, message, Space, Row, Col, Statistic
 import { TeamOutlined, PhoneOutlined, CheckCircleOutlined, WarningOutlined, PieChartOutlined, CalendarOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import RebalanceCallsWidget from '@/components/admin/RebalanceCallsWidget';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title, Text } = Typography;
 interface DTDistribution { dtId: string; dtName: string; dtEmail: string; todaysDue: number; overdue: number; todaysCalls: number; percentage: number; }
@@ -26,7 +27,9 @@ export default function CallDistributionPage() {
       } else {
         // Fallback to static DT load snapshot endpoint if rebalance API is unavailable.
         const snapshotRes = await fetch('/api/admin/distribution');
-        if (!snapshotRes.ok) throw new Error('Failed to fetch distribution data');
+        if (!snapshotRes.ok) {
+          throw new Error(await getErrorFromResponse(snapshotRes, 'Failed to fetch distribution data'));
+        }
         const snapshotBody = await snapshotRes.json();
         const snapshotRows = Array.isArray(snapshotBody?.data) ? snapshotBody.data : [];
         data = {
@@ -106,7 +109,8 @@ export default function CallDistributionPage() {
         isBalanced: deviation <= 1,
       });
     } catch (error) {
-      console.error('Error fetching distribution:', error); message.error('Failed to load distribution data');
+      console.error('Error fetching distribution:', error);
+      message.error(toUserFacingMessage(error, 'Failed to load distribution data'));
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { void fetchDistribution(); }, [fetchDistribution]);

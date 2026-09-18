@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { App, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title, Paragraph } = Typography;
 
@@ -34,13 +35,15 @@ export default function DashboardCustomersPage() {
       try {
         setLoading(true);
         const res = await fetch('/api/admin/customers');
+        if (!res.ok) {
+          throw new Error(await getErrorFromResponse(res, 'Failed to load customers'));
+        }
         const body = await res.json();
-        if (!res.ok) throw new Error(body?.error || 'Failed to load customers');
         const list = body.customers ?? [];
         setRows(list);
         setFiltered(list);
       } catch (error) {
-        messageApi.error(error instanceof Error ? error.message : 'Failed to load customers');
+        messageApi.error(toUserFacingMessage(error, 'Failed to load customers'));
       } finally {
         setLoading(false);
       }

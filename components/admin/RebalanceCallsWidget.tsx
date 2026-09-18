@@ -18,6 +18,7 @@ import {
 } from '@/lib/rebalance/buildRebalanceDistribution';
 import { computeAfterDistribution } from '@/lib/rebalance/computeRebalancePreview';
 import type { RebalanceDtRow, RebalanceConfig, PoolSummary } from '@/lib/rebalance/rebalanceDistribution.types';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Text, Paragraph } = Typography;
 
@@ -50,8 +51,9 @@ export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceC
       setResult(null);
       const response = await fetch('/api/admin/rebalance');
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch distribution preview');
+        throw new Error(
+          await getErrorFromResponse(response, 'Failed to fetch distribution preview')
+        );
       }
       const data = await response.json();
       if (!data.rebalanceConfig) {
@@ -71,7 +73,7 @@ export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceC
       setExpandedRows([]);
     } catch (error) {
       console.error('Error fetching preview:', error);
-      message.error(error instanceof Error ? error.message : 'Failed to load distribution preview');
+      message.error(toUserFacingMessage(error, 'Failed to load distribution preview'));
       setPreview(null);
     } finally {
       setLoading(false);
@@ -118,8 +120,7 @@ export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceC
         }),
       });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to rebalance');
+        throw new Error(await getErrorFromResponse(response, 'Failed to rebalance'));
       }
       const data = await response.json();
       setResult({ success: true, message: data.message });
@@ -128,7 +129,7 @@ export default function RebalanceCallsWidget({ onRebalanceComplete }: RebalanceC
       onRebalanceComplete?.();
     } catch (error) {
       console.error('Error rebalancing:', error);
-      message.error(error instanceof Error ? error.message : 'Failed to rebalance');
+      message.error(toUserFacingMessage(error, 'Failed to rebalance'));
       throw error;
     } finally {
       setRebalancing(false);

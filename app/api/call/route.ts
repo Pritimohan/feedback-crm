@@ -4,6 +4,7 @@ import { createOrUpdateAdhocCallLogBySid } from '@/lib/services/callLogService';
 import { connectCall } from '@/lib/services/exotel';
 import { resolveExotelExophone } from '@/lib/services/exotelExophone';
 import { getSession } from '@/lib/auth/session';
+import { toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 interface CallRequestBody {
   agentPhone?: string;
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     const session = await getSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const brand = await resolveCallBrand(body.customerId || null);
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
       status: exotelResponse.status,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to initiate call';
+    const message = toUserFacingMessage(error, 'Failed to initiate call');
     console.error('Error initiating Exotel call:', error);
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Card, Empty, Select, Space, Tag, Typography } from 'antd';
+import { Card, Empty, Select, Space, Tag, Typography, App } from 'antd';
 import { ClockCircleOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -19,6 +19,7 @@ import {
   MARKETPLACE_FILTER_OPTIONS,
   matchesMarketplaceFilter,
 } from '@/lib/utils/marketplaceSources';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 dayjs.extend(relativeTime);
 
@@ -89,6 +90,7 @@ interface Props {
 }
 
 export default function FollowupList({ refreshTrigger, onFollowupClick }: Props) {
+  const { message } = App.useApp();
   const [calls, setCalls] = useState<FollowupRow[]>([]);
   const [dayBounds, setDayBounds] = useState<{ dayStart: Date; dayEnd: Date } | undefined>();
   const [loading, setLoading] = useState(true);
@@ -108,6 +110,9 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
       try {
         setLoading(true);
         const res = await fetch('/api/dt/followups/active');
+        if (!res.ok) {
+          throw new Error(await getErrorFromResponse(res, 'Failed to load follow-ups'));
+        }
         const json = (await res.json()) as ActiveResponse;
         const raw =
           Array.isArray(json.calls) && json.calls.length > 0
@@ -124,7 +129,8 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
         setCalls(
           sortFeedbackActiveFollowupCalls(raw, { dayBounds: bounds, now: new Date() })
         );
-      } catch {
+      } catch (error) {
+        message.error(toUserFacingMessage(error, 'Failed to load follow-ups'));
         setCalls([]);
       } finally {
         setLoading(false);
@@ -132,7 +138,7 @@ export default function FollowupList({ refreshTrigger, onFollowupClick }: Props)
     };
 
     void fetchData();
-  }, [refreshTrigger]);
+  }, [refreshTrigger, message]);
 
   const filterByFollowupNumber = (items: FollowupRow[]) => {
     if (followupFilter === null) return items;

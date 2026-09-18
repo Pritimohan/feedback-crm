@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, Form, Input, Space, Button, message } from 'antd';
 import { EditOutlined } from '@ant-design/icons';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 type EditForm = {
   name: string;
@@ -63,9 +64,8 @@ export function EditUserModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const body = await response.json();
       if (!response.ok) {
-        throw new Error(body?.error || 'Failed to update user');
+        throw new Error(await getErrorFromResponse(response, 'Failed to update user'));
       }
 
       message.success('User updated successfully');
@@ -73,7 +73,7 @@ export function EditUserModal({
       onSaved();
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to update user');
+      message.error(toUserFacingMessage(error, 'Failed to update user'));
     } finally {
       setSubmitting(false);
     }

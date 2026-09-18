@@ -1,14 +1,17 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { App } from 'antd';
 import { CalendarOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import CallHistoryAccordion from '@/components/dt/CallHistoryAccordion';
 import { CallLog, groupCallsByDate } from '@/lib/utils/callHistoryHelpers';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const OUTCOME_FILTERS = ['Connected', 'No Answer', 'Busy', 'Wrong Number', 'CNR', 'Not Interested'];
 
 export default function CallHistoryPage() {
+  const { message } = App.useApp();
   const [calls, setCalls] = useState<CallLog[]>([]);
   const [filteredCalls, setFilteredCalls] = useState<CallLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -23,17 +26,20 @@ export default function CallHistoryPage() {
     try {
       setIsLoading(true);
       const response = await fetch(`/api/dt/call-logs?startDate=${dateRange.start}&endDate=${dateRange.end}`);
-      if (!response.ok) throw new Error('Failed to fetch call history');
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to fetch call history'));
+      }
 
       const data = await response.json();
       setCalls(data.callHistory || []);
     } catch (error) {
       console.error('Error fetching call history:', error);
+      message.error(toUserFacingMessage(error, 'Failed to load call history'));
       setCalls([]);
     } finally {
       setIsLoading(false);
     }
-  }, [dateRange.end, dateRange.start]);
+  }, [dateRange.end, dateRange.start, message]);
 
   const filterCalls = React.useCallback(() => {
     let filtered = [...calls];

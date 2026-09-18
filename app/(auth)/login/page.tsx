@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, Form, Input, App, Typography, Spin } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title, Text } = Typography;
 
@@ -24,12 +25,12 @@ function LoginForm() {
         body: JSON.stringify({ email: values.email, password: values.password }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        message.error(data.error || 'Login failed');
+        message.error(await getErrorFromResponse(response, 'Login failed'));
         return;
       }
+
+      const data = await response.json();
 
       message.success('Login successful!');
       if (redirectTo) {
@@ -45,7 +46,7 @@ function LoginForm() {
       }
       router.refresh();
     } catch (error) {
-      message.error('An error occurred during login');
+      message.error(toUserFacingMessage(error, 'An error occurred during login'));
       console.error('Login error:', error);
     } finally {
       setLoading(false);

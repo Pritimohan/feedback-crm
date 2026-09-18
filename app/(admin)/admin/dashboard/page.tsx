@@ -8,6 +8,7 @@ import {
   CheckCircleOutlined,
   RiseOutlined,
 } from '@ant-design/icons';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 const { Title } = Typography;
 
@@ -30,12 +31,14 @@ export default function AdminDashboardPage() {
     try {
       setLoading(true);
       const response = await fetch('/api/admin/dashboard');
-      if (!response.ok) throw new Error('Failed to fetch dashboard statistics');
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to fetch dashboard statistics'));
+      }
       const data = await response.json();
       setStats(data);
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
-      message.error('Failed to load dashboard statistics');
+      message.error(toUserFacingMessage(error, 'Failed to load dashboard statistics'));
     } finally {
       setLoading(false);
     }

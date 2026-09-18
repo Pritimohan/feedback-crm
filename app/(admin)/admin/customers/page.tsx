@@ -24,6 +24,7 @@ import { UserOutlined, PhoneOutlined, MailOutlined, EllipsisOutlined, DownloadOu
 import dayjs from 'dayjs';
 import FollowupModal from '@/components/dt/FollowupModal';
 import { followupUiLabel } from '@/lib/utils/followupUiLabel';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 import {
   applyCustomerListFilters,
   customerListFiltersToSearchParams,
@@ -77,10 +78,14 @@ export default function AllCustomersPage() {
     try {
       setLoading(true);
       const customersResponse = await fetch('/api/dt/customers');
-      if (!customersResponse.ok) throw new Error('Failed to fetch customers');
+      if (!customersResponse.ok) {
+        throw new Error(await getErrorFromResponse(customersResponse, 'Failed to fetch customers'));
+      }
       const customersData = await customersResponse.json();
       const dtsResponse = await fetch('/api/admin/dietitians');
-      if (!dtsResponse.ok) throw new Error('Failed to fetch agents');
+      if (!dtsResponse.ok) {
+        throw new Error(await getErrorFromResponse(dtsResponse, 'Failed to fetch agents'));
+      }
       const dtsData = await dtsResponse.json();
       const dtMap = new Map<string, DT>(); dtsData.forEach((dt: DT) => { dtMap.set(dt.id, dt); });
       const nextCustomers = customersData.customers || [];
@@ -97,7 +102,8 @@ export default function AllCustomersPage() {
       );
       setDietitians(dtMap);
     } catch (error) {
-      console.error('Error fetching data:', error); message.error('Failed to load data');
+      console.error('Error fetching data:', error);
+      message.error(toUserFacingMessage(error, 'Failed to load data'));
     } finally { setLoading(false); }
   }, [message, selectedLeadType, selectedMarketplace]);
   useEffect(() => { void fetchData(); }, [fetchData]);
@@ -137,8 +143,7 @@ export default function AllCustomersPage() {
       const params = customerListFiltersToSearchParams(getCurrentFilters());
       const response = await fetch(`/api/admin/customers/export?${params.toString()}`);
       if (!response.ok) {
-        const result = await response.json().catch(() => ({}));
-        throw new Error(result?.error || 'Failed to export customers');
+        throw new Error(await getErrorFromResponse(response, 'Failed to export customers'));
       }
       const blob = await response.blob();
       const disposition = response.headers.get('Content-Disposition') ?? '';
@@ -154,26 +159,37 @@ export default function AllCustomersPage() {
       message.success(rowCount ? `Exported ${rowCount} rows` : 'Export complete');
     } catch (error) {
       console.error('Error exporting customers:', error);
-      message.error(error instanceof Error ? error.message : 'Failed to export customers');
+      message.error(toUserFacingMessage(error, 'Failed to export customers'));
     } finally {
       setExporting(false);
     }
   };
 
   const handleRowClick = async (customerId: string) => {
-    try { setDrawerVisible(true); setHistoryLoading(true); const response = await fetch(`/api/dt/customers/${customerId}`); if (!response.ok) throw new Error('Failed to fetch customer history'); setCustomerHistory(await response.json()); }
-    catch (error) { console.error('Error fetching customer history:', error); message.error('Failed to load customer details'); }
-    finally { setHistoryLoading(false); }
+    try {
+      setDrawerVisible(true);
+      setHistoryLoading(true);
+      const response = await fetch(`/api/dt/customers/${customerId}`);
+      if (!response.ok) {
+        throw new Error(await getErrorFromResponse(response, 'Failed to fetch customer history'));
+      }
+      setCustomerHistory(await response.json());
+    } catch (error) {
+      console.error('Error fetching customer history:', error);
+      message.error(toUserFacingMessage(error, 'Failed to load customer details'));
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const openPendingFollowup = async (customerId: string) => {
     try {
       setOpeningFollowupForCustomerId(customerId);
       const response = await fetch(`/api/dt/customers/${customerId}/pending-followup`);
-      const result = await response.json();
       if (!response.ok) {
-        throw new Error(result?.error || 'Failed to fetch pending follow-up');
+        throw new Error(await getErrorFromResponse(response, 'Failed to fetch pending follow-up'));
       }
+      const result = await response.json();
       if (!result?.followupId) {
         message.info('No pending follow-up for this customer.');
         return;
@@ -182,7 +198,7 @@ export default function AllCustomersPage() {
       setFollowupModalVisible(true);
     } catch (error) {
       console.error('Error opening pending follow-up:', error);
-      message.error(error instanceof Error ? error.message : 'Failed to open follow-up');
+      message.error(toUserFacingMessage(error, 'Failed to open follow-up'));
     } finally {
       setOpeningFollowupForCustomerId(null);
     }

@@ -9,6 +9,7 @@ import {
   brandDisplayName,
   type LeadTypeValue,
 } from '@/components/admin/LeadTypePills';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 type BrandProfile = {
   brand: CrmBrand;
@@ -76,12 +77,12 @@ function BrandProfileForm({
         }),
       });
       if (!response.ok) {
-        throw new Error((await response.json()).error || 'Failed to save');
+        throw new Error(await getErrorFromResponse(response, 'Failed to save'));
       }
       message.success(`${brandDisplayName(brand)} profile updated`);
       onSaved();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to save profile');
+      message.error(toUserFacingMessage(error, 'Failed to save profile'));
     } finally {
       setSubmitting(false);
     }

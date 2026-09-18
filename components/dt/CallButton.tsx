@@ -5,6 +5,7 @@ import { App, Button, Input, Modal, Tooltip } from 'antd';
 import { PhoneOutlined } from '@ant-design/icons';
 import type { ButtonProps } from 'antd';
 import type { CrmBrand } from '@/lib/crmBrand.shared';
+import { toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 interface CallButtonProps {
   customerPhone: string;
@@ -65,15 +66,16 @@ export default function CallButton({
         }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as { success?: boolean; error?: string };
       if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to initiate call');
+        throw new Error(
+          toUserFacingMessage(result.error, 'Failed to initiate call')
+        );
       }
 
       message.success('Call initiated successfully');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to initiate call';
-      message.error(errorMessage);
+      message.error(toUserFacingMessage(error, 'Failed to initiate call'));
     } finally {
       setLoading(false);
     }

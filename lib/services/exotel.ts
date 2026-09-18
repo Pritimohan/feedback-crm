@@ -1,4 +1,5 @@
 import type { CrmBrand } from '@/lib/crmBrand.shared';
+import { extractErrorFromBody, extractMessageFromXml } from '@/lib/errors/userFacingError';
 import { resolveExotelExophone } from '@/lib/services/exotelExophone';
 
 export interface ExotelCallRequest {
@@ -140,15 +141,15 @@ export async function connectCall(request: ExotelCallRequest): Promise<ExotelCal
   try {
     raw = text ? JSON.parse(text) : {};
   } catch {
-    raw = { error: text };
+    raw = text ? { error: text } : {};
   }
 
   if (!response.ok) {
     const apiError =
-      (raw as { error?: string }).error ||
-      (raw as { RestException?: { Message?: string } }).RestException?.Message ||
+      extractErrorFromBody(raw) ||
+      extractMessageFromXml(text) ||
       'Exotel call failed';
-    throw new Error(`Exotel call failed (${response.status} ${response.statusText}): ${apiError}`);
+    throw new Error(apiError);
   }
 
   const callSid = extractCallSid(raw, text);

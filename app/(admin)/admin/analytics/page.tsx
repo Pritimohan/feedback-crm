@@ -28,6 +28,7 @@ import {
 import './analytics-page.css';
 import { followupStageLabel } from '@/lib/utils/analyticsStageLabels';
 import { sumConversionBreakdown } from '@/lib/utils/analyticsOutcomes';
+import { getErrorFromResponse, toUserFacingMessage } from '@/lib/errors/userFacingError';
 
 type TabKey = 'overview' | 'outcomes' | 'agents';
 
@@ -94,11 +95,21 @@ export default function AnalyticsPage() {
           fetch(`/api/admin/analytics/dietitians-workload?${workloadParams}`),
         ]);
 
-      if (!analyticsRes.ok) throw new Error('Failed to fetch analytics');
-      if (!outcomesRes.ok) throw new Error('Failed to fetch outcomes');
-      if (!dietitianRes.ok) throw new Error('Failed to fetch agent analytics');
-      if (!transactionsRes.ok) throw new Error('Failed to fetch transactions');
-      if (!dtWorkloadRes.ok) throw new Error('Failed to fetch agent workload');
+      if (!analyticsRes.ok) {
+        throw new Error(await getErrorFromResponse(analyticsRes, 'Failed to fetch analytics'));
+      }
+      if (!outcomesRes.ok) {
+        throw new Error(await getErrorFromResponse(outcomesRes, 'Failed to fetch outcomes'));
+      }
+      if (!dietitianRes.ok) {
+        throw new Error(await getErrorFromResponse(dietitianRes, 'Failed to fetch agent analytics'));
+      }
+      if (!transactionsRes.ok) {
+        throw new Error(await getErrorFromResponse(transactionsRes, 'Failed to fetch transactions'));
+      }
+      if (!dtWorkloadRes.ok) {
+        throw new Error(await getErrorFromResponse(dtWorkloadRes, 'Failed to fetch agent workload'));
+      }
 
       const [analyticsJson, outcomesJson, dietitianJson, transactionsJson, dtWorkloadJson] =
         await Promise.all([
@@ -182,7 +193,7 @@ export default function AnalyticsPage() {
       );
       setTransactions((transactionsJson as { transactions: TransactionRow[] }).transactions ?? []);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'An error occurred';
+      const msg = toUserFacingMessage(err, 'An error occurred');
       setError(msg);
       messageApi.error(msg);
     } finally {
@@ -211,12 +222,13 @@ export default function AnalyticsPage() {
         }
 
         const res = await fetch(`/api/admin/analytics/dietitians/${dt.dtId}/reviewed?${params}`);
-        if (!res.ok) throw new Error('Failed to fetch reviewed conversions');
+        if (!res.ok) {
+          throw new Error(await getErrorFromResponse(res, 'Failed to fetch reviewed conversions'));
+        }
         const json = (await res.json()) as { reviewed?: AgentReviewedRow[] };
         setReviewedRows(Array.isArray(json.reviewed) ? json.reviewed : []);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to fetch reviewed conversions';
-        messageApi.error(msg);
+        messageApi.error(toUserFacingMessage(err, 'Failed to fetch reviewed conversions'));
       } finally {
         setReviewedLoading(false);
       }
