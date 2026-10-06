@@ -113,6 +113,27 @@
       "when": 1777545600000,
       "tag": "0015_app_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1777632000000,
+      "tag": "0016_orders_external_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1777718400000,
+      "tag": "0017_lifecycle_order_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1777804800000,
+      "tag": "0018_drop_lifecycle_order_link",
+      "breakpoints": true
     }
   ]
 }

@@ -76,7 +76,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ fo
             .limit(1);
 
           const issueDescription = body.payload?.issue_description?.trim() || 'N/A';
-          const orderId = existing.latestOrder?.shopify_order_id?.trim() || 'N/A';
+          const orderId =
+            existing.latestOrder?.external_order_id?.trim() ||
+            existing.latestOrder?.marketplace_order_id?.trim() ||
+            existing.latestOrder?.shopify_order_id?.trim() ||
+            'N/A';
           const productPurchased = existing.latestOrder?.product_name?.trim() || 'N/A';
 
           await sendConnectedIssueRowToGoogleSheet({
