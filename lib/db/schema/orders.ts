@@ -9,6 +9,10 @@ export const orders = pgTable(
       .references(() => customers.id)
       .notNull(),
     shopify_order_id: varchar('shopify_order_id', { length: 255 }),
+    external_order_id: varchar('external_order_id', { length: 255 }),
+    marketplace_order_id: varchar('marketplace_order_id', { length: 255 }),
+    order_source: varchar('order_source', { length: 80 }),
+    ref_code: varchar('ref_code', { length: 255 }),
     sku: varchar('sku', { length: 255 }),
     product_name: varchar('product_name', { length: 255 }),
     quantity: integer('quantity').notNull().default(1),
@@ -28,6 +32,8 @@ export const orders = pgTable(
     channelIdx: index('orders_channel_idx').on(table.channel),
     deliveryStatusIdx: index('orders_delivery_status_idx').on(table.delivery_status),
     shopifyOrderIdx: index('orders_shopify_order_idx').on(table.shopify_order_id),
+    externalOrderIdx: index('orders_external_order_idx').on(table.external_order_id),
+    marketplaceOrderIdx: index('orders_marketplace_order_idx').on(table.marketplace_order_id),
   })
 );
 
