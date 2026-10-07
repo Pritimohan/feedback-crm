@@ -3,8 +3,8 @@ import { db, type FeedbackDb } from '@/lib/db';
 import { orders, type Order } from '@/lib/db/schema';
 import { refreshCustomerSummary } from '@/lib/services/customerSummaryService';
 
-/** Temporary orders service. Diet plan sends an id; missing rows are loaded from here. */
-const ORDER_DETAILS_API_BASE = 'http://localhost:3000';
+/** Diet plan sends an id; missing rows are loaded from here. */
+const ORDER_DETAILS_API_BASE = 'https://retention-crm.internal.livfitty.com';
 
 export type EnsureCustomerOrderResult =
   | { status: 'exists'; order: Order }
@@ -185,10 +185,19 @@ function normalizeOrderDetails(payload: unknown, requestedOrderId: string): Inco
 }
 
 async function fetchOrderDetails(orderId: string): Promise<IncomingOrderInput> {
+  const token = process.env.ORDER_DETAILS_API_TOKEN?.trim();
+  if (!token) {
+    throw new Error('ORDER_DETAILS_API_TOKEN is not configured');
+  }
+
   const url = `${ORDER_DETAILS_API_BASE}/api/v1/orders/${encodeURIComponent(orderId)}`;
   let response: Response;
   try {
-    response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(8000) });
+    response = await fetch(url, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8000),
+    });
   } catch {
     throw new Error('Could not reach the orders service');
   }
@@ -221,7 +230,25 @@ export async function ensureCustomerOrder(
 
   const existing = await findCustomerOrderById(customerId, id);
   if (existing) {
-    return { status: 'exists', order: existing };
+    if (existing.product_name?.trim()) {
+      return { status: 'exists', order: existing };
+    }
+    try {
+      const details = await fetchOrderDetails(id);
+      const productName = cleanText(details.productName);
+      if (!productName) {
+        return { status: 'exists', order: existing };
+      }
+      const [updated] = await db
+        .update(orders)
+        .set({ product_name: productName, updated_at: new Date() })
+        .where(eq(orders.id, existing.id))
+        .returning();
+      return { status: 'exists', order: updated ?? existing };
+    } catch (error) {
+      console.error('Order product name backfill failed:', error);
+      return { status: 'exists', order: existing };
+    }
   }
 
   let details: IncomingOrderInput;

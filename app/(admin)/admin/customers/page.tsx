@@ -281,12 +281,10 @@ export default function AllCustomersPage() {
                     return k !== 'objective' && k !== 'escalated';
                   });
 
-                  const productName = (() => {
-                    const brand = customerHistory.customer.brand;
-                    if (brand === 'fitty') return 'GLP';
-                    if (brand === 'fitelo') return 'Smart Scale';
-                    return customerHistory.customer.latestProductName?.trim() || customerHistory.customer.sku?.trim() || '';
-                  })();
+                  const productName =
+                    customerHistory.customer.latestProductName?.trim() ||
+                    customerHistory.customer.sku?.trim() ||
+                    '';
                   const variant = customerHistory.customer.variant?.trim() || '';
                   const source = customerHistory.customer.source?.trim() || '';
 
