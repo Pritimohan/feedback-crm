@@ -217,12 +217,7 @@ function formatLeadProductDisplay(
   lead: FollowupDetails['lead'],
   latestOrder: FollowupDetails['latestOrder']
 ): string {
-  const base =
-    lead.brand === 'fitty'
-      ? 'GLP'
-      : lead.brand === 'fitelo'
-        ? 'smart scale'
-        : latestOrder?.product_name?.trim() || '';
+  const base = latestOrder?.product_name?.trim() || '';
 
   const parts: string[] = [];
   if (base) parts.push(base);
